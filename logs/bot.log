@@ -1,0 +1,358 @@
+2026-09-28 19:10:51 INFO    === Ciclo de decisão | modo paper | capital 10000.00 USDT | posições: nenhuma ===
+2026-09-28 19:11:07 INFO    HTTP Request: POST https://api.openai.com/v1/responses "HTTP/1.1 200 OK"
+2026-09-28 19:11:07 INFO    Notícias BTC: bullish (0.45)
+2026-09-28 19:11:17 INFO    HTTP Request: POST https://api.openai.com/v1/responses "HTTP/1.1 200 OK"
+2026-09-28 19:11:17 INFO    BTC/USDT @ 83951.6 -> HOLD (conf 0.66, 1/1, 10s) => sem ação
+2026-09-28 19:11:17 INFO       motivo: Apesar do contexto diário favorável, a entrada agora seria perto de resistência e sem volume de breakout. Os alvos próximos não dão uma relação risco/retorno suficiente após custos com um stop lógico dentro do intervalo permitido. Melhor esperar por fecho acima de resistência com volume ou por pullback a suporte com reação clara.
+2026-09-28 19:11:34 INFO    HTTP Request: POST https://api.openai.com/v1/responses "HTTP/1.1 200 OK"
+2026-09-28 19:11:34 INFO    Notícias ETH: bullish (0.15)
+2026-09-28 19:11:45 INFO    HTTP Request: POST https://api.openai.com/v1/responses "HTTP/1.1 200 OK"
+2026-09-28 19:11:45 INFO    ETH/USDT @ 2696.61 -> HOLD (conf 0.60, 1/1, 11s) => sem ação
+2026-09-28 19:11:45 INFO       motivo: Apesar do contexto diário favorável, comprar aqui seria perseguir perto de resistência, com Stoch RSI elevado e pouco espaço até ao próximo obstáculo. Um stop lógico abaixo de 2668/2664 deixaria o rácio risco/retorno para 2724–2743 insuficiente depois de custos. Prefiro esperar por fecho claro acima de 2724 com volume ou por pullback controlado a suporte.
+2026-09-28 19:11:59 INFO    HTTP Request: POST https://api.openai.com/v1/responses "HTTP/1.1 200 OK"
+2026-09-28 19:11:59 INFO    Notícias SOL: bullish (0.20)
+2026-09-28 19:12:10 INFO    HTTP Request: POST https://api.openai.com/v1/responses "HTTP/1.1 200 OK"
+2026-09-28 19:12:10 INFO    SOL/USDT @ 119.82 -> HOLD (conf 0.66, 1/1, 11s) => sem ação
+2026-09-28 19:12:10 INFO       motivo: Apesar do suporte do diário, a entrada aqui seria perto de resistência e sem confirmação clara de breakout com volume. Para comprar com stop abaixo da zona 117,36–118,14, o alvo realista em 121,83–122,94 não oferece margem suficientemente confortável após custos. Melhor esperar por reclaim/fecho acima de 120,39–121,83 com volume, ou novo pullback para suporte.
+2026-09-28 19:12:53 INFO    HTTP Request: POST https://api.openai.com/v1/responses "HTTP/1.1 200 OK"
+2026-09-28 19:12:53 INFO    Notícias BTC: neutral (-0.10)
+2026-09-28 19:15:54 ERROR   Falha na IA: Error code: 500 - {'error': {'message': 'The server had an error processing your request. Sorry about that! You can retry your request, or contact us through our help center at help.openai.com if you keep seeing this error. (Please include the request ID req_281f855af50b4466b8c592f328e6fa7f in your email.)', 'type': 'server_error', 'param': None, 'code': None}}
+2026-09-28 19:16:40 ERROR   Falha na IA: Error code: 500 - {'error': {'message': 'The server had an error processing your request. Sorry about that! You can retry your request, or contact us through our help center at help.openai.com if you keep seeing this error. (Please include the request ID req_76f51becc1da4c6084114160d812cf59 in your email.)', 'type': 'server_error', 'param': None, 'code': None}}
+2026-09-28 19:17:30 ERROR   Falha na IA: Error code: 500 - {'error': {'message': 'The server had an error processing your request. Sorry about that! You can retry your request, or contact us through our help center at help.openai.com if you keep seeing this error. (Please include the request ID req_613d39bda94e444f92c4622a9db4c400 in your email.)', 'type': 'server_error', 'param': None, 'code': None}}
+2026-09-28 19:18:27 ERROR   Falha na IA: Error code: 500 - {'error': {'message': 'The server had an error processing your request. Sorry about that! You can retry your request, or contact us through our help center at help.openai.com if you keep seeing this error. (Please include the request ID req_b851a146ae5740ef84eaa175149f252f in your email.)', 'type': 'server_error', 'param': None, 'code': None}}
+2026-09-28 19:19:50 ERROR   Falha na IA: Error code: 500 - {'error': {'message': 'The server had an error processing your request. Sorry about that! You can retry your request, or contact us through our help center at help.openai.com if you keep seeing this error. (Please include the request ID req_e0814d3d4c0347098c7c90429485b324 in your email.)', 'type': 'server_error', 'param': None, 'code': None}}
+2026-09-28 19:20:57 ERROR   Falha na IA: Error code: 500 - {'error': {'message': 'The server had an error processing your request. Sorry about that! You can retry your request, or contact us through our help center at help.openai.com if you keep seeing this error. (Please include the request ID req_8ad6900bbe4c4492b09a5d02d1cc0df9 in your email.)', 'type': 'server_error', 'param': None, 'code': None}}
+2026-09-28 19:30:31 INFO    COMPRA SOL/USDT: 26.9906 @ 111.206 (3004.50 USDT) | stop 110.38 | TP 114.32 | R:R 2.57 | conf 0.64
+2026-09-28 19:30:31 INFO    VENDA SOL/USDT (stop_loss): @ 110.325 | PnL -29.75 USDT (-0.99%, -1.18R)
+2026-09-28 19:30:36 INFO    COMPRA SOL/USDT: 26.9588 @ 111.005 (2995.56 USDT) | stop 110.06 | TP 114.32 | R:R 2.48 | conf 0.66
+2026-09-28 19:30:36 INFO    VENDA SOL/USDT (stop_loss): @ 110.005 | PnL -32.93 USDT (-1.10%, -1.16R)
+2026-09-28 19:30:42 INFO    COMPRA SOL/USDT: 27.4866 @ 108.514 (2985.67 USDT) | stop 107.34 | TP 112.46 | R:R 2.54 | conf 0.66
+2026-09-28 19:30:48 INFO    SOL/USDT: IA subiu o stop 107.34 -> 107.68
+2026-09-28 19:30:48 INFO    SOL/USDT: stop automático subiu para 108.84
+2026-09-28 19:30:56 INFO    SOL/USDT: stop automático subiu para 108.96
+2026-09-28 19:30:56 INFO    VENDA SOL/USDT (take_profit): @ 112.404 | PnL +100.84 USDT (+3.38%, +2.86R)
+2026-09-28 22:05:51 INFO    Bot iniciado | modo PAPER | símbolos BTC/USDT, ETH/USDT, SOL/USDT | timeframe 1h | modelo gpt-5.5
+2026-09-28 22:05:51 INFO    === Ciclo de decisão | modo paper | capital 10000.00 USDT | posições: nenhuma ===
+2026-09-28 22:07:11 INFO    Bot iniciado | modo PAPER | símbolos BTC/USDT, ETH/USDT, SOL/USDT | timeframe 1h | modelo gpt-5.5
+2026-09-28 22:07:11 INFO    === Ciclo de decisão | modo paper | capital 10000.00 USDT | posições: nenhuma ===
+2026-09-28 22:23:27 INFO    Aplicação iniciada em http://127.0.0.1:8765/
+2026-09-28 22:24:10 INFO    Aplicação iniciada em http://127.0.0.1:8765/
+2026-09-28 22:24:52 INFO    Aplicação iniciada em http://127.0.0.1:8765/
+2026-09-28 22:25:16 INFO    Aplicação iniciada em http://127.0.0.1:8765/
+2026-09-28 22:25:32 INFO    Aplicação iniciada em http://127.0.0.1:8765/
+2026-09-28 22:27:08 INFO    Bot iniciado | MODO TESTE | pares BTC/USDT, ETH/USDT, SOL/USDT | timeframe 1h | modelo gpt-5.5
+2026-09-28 22:27:08 INFO    === Análise | MODO TESTE | capital 10000.00 USDT | posições: nenhuma ===
+2026-09-28 22:27:30 INFO    Notícias BTC: bearish (-0.45)
+2026-09-28 22:27:43 INFO    BTC/USDT @ 83464 -> HOLD (conf 0.64, 1/1, 13s) => sem ação
+2026-09-28 22:27:43 INFO       motivo: Não há confirmação suficiente para comprar: o preço está em suporte, mas sem volume, sem breakout e com o 1h ainda em tendência descendente. Um stop lógico abaixo de 82563 é válido, mas o alvo 85159 oferece margem apenas moderada após custos, enquanto mirar 87278 exigiria romper resistências intermédias ainda não confirmadas. Prefiro esperar por reclaim claro acima de 84193/84381 com volume ou por novo teste de suporte com viragem mais limpa.
+2026-09-28 22:27:54 INFO    Notícias ETH: bullish (0.40)
+2026-09-28 22:28:06 INFO    ETH/USDT @ 2681.14 -> HOLD (conf 0.60, 1/1, 11s) => sem ação
+2026-09-28 22:28:06 INFO       motivo: Existe uma ideia de pullback em tendência maior, mas falta confirmação clara no timeframe principal: pouco volume, momentum misto e preço ainda preso abaixo das resistências imediatas. Um stop estrutural abaixo de 2635 daria espaço, mas a entrada atual ainda não tem força suficiente para justificar comprar antes de um reclaim/breakout mais convincente.
+2026-09-28 22:28:17 INFO    Notícias SOL: bullish (0.70)
+2026-09-28 22:28:29 INFO    SOL/USDT @ 118.32 -> HOLD (conf 0.64, 1/1, 12s) => sem ação
+2026-09-28 22:28:29 INFO       motivo: Há potencial de pullback dentro de tendência maior, mas ainda falta confirmação de viragem: o 1h não recuperou 119,77–120,14 e o volume recente está abaixo da média. Comprar agora exigiria stop abaixo de 116,12 e alvo em 122,94/124,95, mas a probabilidade ainda não é suficientemente clara face ao momentum curto prazo fraco. Prefiro esperar por fecho acima de 119,77–120,14 com melhoria de volume/momentum ou por teste mais limpo ao suporte.
+2026-09-28 22:28:46 INFO    Bot parado. As posições abertas mantêm-se, mas só são vigiadas com o bot a correr.
+2026-09-28 22:29:28 INFO    Aplicação iniciada em http://127.0.0.1:8765/
+2026-09-28 22:31:06 INFO    VENDA ETH/USDT (manual): @ 2680.99 | PnL +24.12 USDT (+0.83%, +0.46R)
+2026-09-28 22:31:40 INFO    Aplicação iniciada em http://127.0.0.1:8765/
+2026-09-28 22:32:01 INFO    Aplicação iniciada em http://127.0.0.1:8765/
+2026-09-28 22:32:34 INFO    Aplicação iniciada em http://127.0.0.1:8765/
+2026-09-28 22:38:43 INFO    Aplicação iniciada em http://127.0.0.1:8765/
+2026-09-28 22:59:17 INFO    Aplicação iniciada em http://127.0.0.1:8765/
+2026-09-28 23:00:22 INFO    === Análise | MODO TESTE | capital 10000.00 USDT | posições: nenhuma ===
+2026-09-28 23:00:37 INFO    Notícias BTC: bearish (-0.35)
+2026-09-28 23:00:38 INFO    Bot parado. As posições abertas mantêm-se, mas só são vigiadas com o bot a correr.
+2026-09-28 23:00:51 INFO    Aplicação iniciada em http://127.0.0.1:8765/
+2026-09-28 23:01:01 INFO    Bot iniciado | MODO TESTE | pares BTC/USDT, ETH/USDT, SOL/USDT | timeframe 1h | modelo gpt-5.5
+2026-09-28 23:01:01 INFO    === Análise | MODO TESTE | capital 10000.00 USDT | posições: nenhuma ===
+2026-09-28 23:01:17 INFO    Notícias BTC: bullish (0.30)
+2026-09-28 23:01:30 INFO    BTC/USDT @ 83183 -> HOLD (conf 0.67, 1/1, 13s) => sem ação
+2026-09-28 23:01:30 INFO       motivo: Apesar de existir uma possível zona de pullback dentro de uma tendência diária alta, a entrada agora seria antecipada: falta reclaim acima de 84193/84381 ou uma reação mais clara no suporte com momentum/volume. O stop lógico abaixo de 82563 é possível, mas comprar sem confirmação num 1h ainda fraco reduz a qualidade do setup. Mantém-se a decisão recente de esperar por confirmação.
+2026-09-28 23:01:47 INFO    Notícias ETH: bullish (0.10)
+2026-09-28 23:02:00 INFO    ETH/USDT @ 2672.03 -> HOLD (conf 0.64, 1/1, 13s) => sem ação
+2026-09-28 23:02:00 INFO       motivo: Há uma possível ideia de pullback em tendência maior, mas falta gatilho no timeframe principal: não há reclaim convincente, nem volume, nem momentum 1h a acelerar. Um stop lógico abaixo de 2635 exigiria alvo em 2789/2807 para compensar custos, mas a entrada atual ainda não tem qualidade suficiente. Mantém-se coerente esperar por recuperação acima de 2696–2724 com força ou por novo teste mais limpo do suporte.
+2026-09-28 23:02:11 INFO    Notícias SOL: bullish (0.35)
+2026-09-28 23:02:22 INFO    SOL/USDT @ 117.63 -> HOLD (conf 0.66, 1/1, 10s) => sem ação
+2026-09-28 23:02:22 INFO       motivo: Apesar de haver potencial de pullback dentro da tendência maior, ainda não há sinal suficiente de reversão: MACD 1h não está a subir, 15m está forte em baixa e o preço não recuperou 119,77–120,14. Comprar agora seria tentar apanhar o fundo, não uma confirmação disciplinada. Mantenho a decisão recente de esperar por reclaim com volume/momentum ou por uma capitulação/reversão mais clara no suporte.
+2026-09-28 23:07:55 INFO    Bot parado. As posições abertas mantêm-se, mas só são vigiadas com o bot a correr.
+2026-09-28 23:08:02 INFO    Definições aplicadas.
+2026-09-28 23:08:03 INFO    Bot iniciado | MODO TESTE | pares BTC/USDT, ETH/USDT, SOL/USDT | timeframe 15m | modelo gpt-5.5
+2026-09-28 23:08:04 INFO    === Análise | MODO TESTE | capital 10000.00 USDT | posições: nenhuma ===
+2026-09-28 23:08:16 INFO    Notícias BTC: bullish (0.35)
+2026-09-28 23:08:23 INFO    BTC/USDT @ 83120 -> HOLD (conf 0.68, 1/1, 8s) => sem ação
+2026-09-28 23:08:23 INFO       motivo: Não há setup longo suficientemente confirmado: é mais uma tentativa de apanhar suporte do que uma reversão validada. Comprar agora exigiria stop abaixo de 82563, mas o momentum imediato é fraco e o preço ainda não recuperou 83534/83820 nem rompeu 84193/84381 com volume. Mantém-se a disciplina das decisões recentes: esperar por reclaim ou reação bullish clara.
+2026-09-28 23:08:40 INFO    Notícias ETH: neutral (0.10)
+2026-09-28 23:08:50 INFO    ETH/USDT @ 2669.55 -> HOLD (conf 0.68, 1/1, 9s) => sem ação
+2026-09-28 23:08:50 INFO       motivo: Continuo sem gatilho de compra: o preço está em zona de suporte, mas ainda não mostrou viragem de momentum nem volume comprador. Comprar agora seria antecipar o ressalto, com 5m em queda e resistência imediata em 2696–2724. Prefiro esperar por reclaim claro acima de 2696–2703 ou por teste/rejeição mais convincente dos suportes inferiores.
+2026-09-28 23:09:03 INFO    Notícias SOL: bullish (0.20)
+2026-09-28 23:09:15 INFO    SOL/USDT @ 117.36 -> HOLD (conf 0.70, 1/1, 12s) => sem ação
+2026-09-28 23:09:15 INFO       motivo: Não há setup disciplinado de compra: isto ainda parece uma queda em curso, não um pullback confirmado a virar para cima. Comprar agora seria tentar apanhar o fundo antes de reclaim de 118,71–119,77/120,14 ou de divergência/rejeição com volume. Mantenho-me fora até haver confirmação de reversão ou recuperação de resistência com momentum.
+2026-09-28 23:15:21 INFO    === Análise | MODO TESTE | capital 10000.00 USDT | posições: nenhuma ===
+2026-09-28 23:15:30 INFO    BTC/USDT @ 83168 -> HOLD (conf 0.69, 1/1, 7s) => sem ação
+2026-09-28 23:15:30 INFO       motivo: Comprar agora seria antecipar uma reação no suporte sem confirmação suficiente de reversão. O stop lógico teria de ficar abaixo de 82563, mas o alvo até 85159 só fica interessante se houver primeiro recuperação de 83820/84381. Mantém-se a disciplina das decisões recentes: esperar por reclaim com volume ou por viragem bullish mais clara.
+2026-09-28 23:15:41 INFO    ETH/USDT @ 2671.3 -> HOLD (conf 0.68, 1/1, 8s) => sem ação
+2026-09-28 23:15:41 INFO       motivo: A ideia de pullback em tendência maior existe, mas neste candle ainda seria antecipar o ressalto: RSI 15m cai, Stoch RSI está baixo mas sem cruzamento, volume é neutro e não houve reclaim de 2696–2703. Um stop estrutural válido teria de ficar abaixo de 2651/2642, exigindo alvo mais alto para bom R/R, mas falta gatilho para justificar a entrada. Mantenho a disciplina e espero confirmação de força ou rejeição clara do suporte.
+2026-09-28 23:15:49 INFO    SOL/USDT @ 117.46 -> HOLD (conf 0.74, 1/1, 7s) => sem ação
+2026-09-28 23:15:49 INFO       motivo: Não há setup de compra confirmado: isto é um teste de suporte dentro de pressão vendedora, não uma reversão validada. Para comprar seria preciso ver reclaim de 118,71–119,77 com melhoria de momentum/volume, ou uma rejeição clara do suporte com divergência. Manter-me fora é consistente com as decisões recentes enquanto o preço não recuperar estrutura.
+2026-09-28 23:30:20 INFO    === Análise | MODO TESTE | capital 10000.00 USDT | posições: nenhuma ===
+2026-09-28 23:30:30 INFO    BTC/USDT @ 83242.4 -> HOLD (conf 0.68, 1/1, 8s) => sem ação
+2026-09-28 23:30:30 INFO       motivo: Não há setup longo suficientemente confirmado: isto ainda parece uma tentativa de segurar suporte, não uma reversão validada. Um stop lógico teria de ficar abaixo de 82563, mas comprar antes de recuperar resistências próximas deixa a entrada exposta a ruído e continuação da queda. Mantém-se a disciplina das decisões recentes: esperar por reclaim com volume ou por uma viragem bullish mais limpa.
+2026-09-28 23:30:41 INFO    ETH/USDT @ 2675.95 -> HOLD (conf 0.69, 1/1, 8s) => sem ação
+2026-09-28 23:30:41 INFO       motivo: A ideia de pullback em tendência maior continua válida em abstrato, mas ainda falta gatilho: não houve fecho acima de 2690/2696, o volume está negativo e o Stoch RSI 15m ainda não virou claramente. Comprar aqui seria antecipar o ressalto dentro de uma consolidação, com risco de novo teste a 2665/2651. Mantém-se melhor esperar por reclaim com força ou por rejeição clara de suporte com volume.
+2026-09-28 23:30:54 INFO    SOL/USDT @ 117.72 -> HOLD (conf 0.74, 1/1, 11s) => sem ação
+2026-09-28 23:30:54 INFO       motivo: Ainda não há confirmação suficiente para comprar: o ressalto desde 117,26 foi pequeno e com volume abaixo da média. Comprar aqui seria antecipar o fundo antes de reclaim de estrutura, contrariando as decisões recentes. Prefiro esperar por fecho acima de 118,71–119,77 com melhoria de volume/momentum, ou por uma reversão mais clara no suporte.
+2026-09-28 23:45:20 INFO    === Análise | MODO TESTE | capital 10000.00 USDT | posições: nenhuma ===
+2026-09-28 23:45:34 INFO    BTC/USDT @ 83500 -> HOLD (conf 0.68, 1/1, 11s) => sem ação
+2026-09-28 23:45:34 INFO       motivo: Ainda não há setup longo com confirmação suficiente: isto parece uma reação de suporte, mas sem reclaim claro nem volume. Comprar agora exigiria confiar numa reversão antes de o 1h virar e antes de romper resistências próximas, reduzindo a qualidade da entrada. Mantém-se melhor esperar por fecho acima de 83820–84381 com volume ou por novo teste de suporte com rejeição mais limpa.
+2026-09-28 23:45:51 INFO    ETH/USDT @ 2685.49 -> HOLD (conf 0.66, 1/1, 15s) => sem ação
+2026-09-28 23:45:51 INFO       motivo: Apesar da melhoria no último candle, ainda não há breakout nem confirmação suficiente de pullback: falta volume, força relativa e fecho acima de resistência relevante. Comprar agora seria antecipar a continuação dentro de uma consolidação, e o alvo mais próximo em 2724 não compensa bem o risco após custos. Prefiro esperar por reclaim claro de 2696–2703 com volume ou novo teste/rejeição convincente de suporte.
+2026-09-28 23:46:06 INFO    SOL/USDT @ 118.44 -> HOLD (conf 0.68, 1/1, 13s) => sem ação
+2026-09-28 23:46:06 INFO       motivo: Há potencial para setup de pullback em tendência maior, mas ainda falta confirmação: o preço está abaixo/na zona das EMAs curtas de 15m e não houve reclaim limpo com volume. Comprar agora seria antecipar o fundo, contra a sequência recente de esperar por recuperação de estrutura. Prefiro aguardar fecho acima de 119,77–120,14 com volume/momentum ou nova rejeição clara do suporte.
+2026-09-28 23:57:21 INFO    Definições aplicadas.
+2026-09-28 23:57:21 INFO    === Análise | MODO TESTE | capital 10000.00 USDT | posições: nenhuma ===
+2026-09-28 23:57:36 INFO    Notícias BTC: bearish (-0.20)
+2026-09-28 23:57:47 INFO    BTC/USDT @ 83538.9 -> HOLD (conf 0.68, 1/1, 11s) => sem ação
+2026-09-28 23:57:47 INFO       motivo: Apesar do enquadramento diário favorável, comprar aqui ainda seria antecipar a reversão numa zona congestionada e com resistências próximas. O alvo imediato em 85159 dá pouco espaço face a um stop estrutural abaixo de 82563 após custos, e falta volume/momentum para justificar apontar já a 87278–87395. Mantém-se a disciplina das decisões recentes: esperar por reclaim com volume ou por nova rejeição clara do suporte.
+2026-09-28 23:57:59 INFO    Notícias ETH: bearish (-0.40)
+2026-09-28 23:58:10 INFO    ETH/USDT @ 2686.91 -> HOLD (conf 0.68, 1/1, 10s) => sem ação
+2026-09-28 23:58:10 INFO       motivo: A ideia de pullback em tendência maior existe, mas comprar aqui ainda seria antecipar a confirmação dentro de uma consolidação. O preço está perto das EMAs e acima do suporte, mas sem volume nem fecho acima da resistência relevante; o R/R só fica interessante mirando 2789/2807, exigindo melhor gatilho. Mantém-se coerente esperar por reclaim com força ou por novo teste/rejeição clara de 2665–2635.
+2026-09-28 23:58:25 INFO    Notícias SOL: bullish (0.42)
+2026-09-28 23:58:35 INFO    SOL/USDT @ 118.57 -> HOLD (conf 0.69, 1/1, 10s) => sem ação
+2026-09-28 23:58:35 INFO       motivo: Apesar de o pullback poder estar perto de uma zona interessante, o sinal de viragem ainda não está confirmado: o ressalto acima de 117,36 ocorreu sem volume e sem fecho 1h acima das resistências relevantes. Comprar agora seria antecipar o fundo, não executar um setup validado. Mantenho-me fora até haver recuperação de estrutura com momentum ou rejeição de suporte mais clara.
+2026-09-29 00:00:21 INFO    === Análise | MODO TESTE | capital 10000.00 USDT | posições: nenhuma ===
+2026-09-29 00:00:35 INFO    BTC/USDT @ 83544 -> HOLD (conf 0.67, 1/1, 12s) => sem ação
+2026-09-29 00:00:35 INFO       motivo: Ainda não há confirmação suficiente para comprar: é uma reação de suporte dentro de congestão, não um breakout nem uma reversão validada por volume. Um stop lógico abaixo de 82563 é aceitável, mas o alvo imediato em 85159 oferece margem limitada após custos, e apontar já a 87278 exigiria momentum que ainda não apareceu. Mantém-se melhor esperar por fecho acima de 84381/85159 com volume ou por novo teste de suporte com rejeição clara.
+2026-09-29 00:00:50 INFO    ETH/USDT @ 2687.79 -> HOLD (conf 0.70, 1/1, 13s) => sem ação
+2026-09-29 00:00:50 INFO       motivo: Mantenho HOLD porque a estrutura maior favorece longs, mas o gatilho ainda não apareceu: estamos numa consolidação com resistência imediata e volume z-score negativo. Comprar agora seria antecipar confirmação, não executar um pullback confirmado nem um breakout. Prefiro esperar por reclaim de 2696–2703 com volume ou por novo teste/rejeição convincente de 2665–2635.
+2026-09-29 00:01:02 INFO    SOL/USDT @ 118.62 -> HOLD (conf 0.69, 1/1, 10s) => sem ação
+2026-09-29 00:01:02 INFO       motivo: Apesar do contexto diário positivo, ainda não há confirmação suficiente para abrir longo: o ressalto desde 117,26 ocorreu com volume abaixo da média e sem reclaim claro de estrutura. Comprar aqui seria antecipar o fundo, não executar um pullback confirmado. Prefiro esperar por fecho acima de 119,77–120,73 com volume/momentum ou por nova rejeição forte do suporte.
+2026-09-29 00:02:10 INFO    Bot parado. As posições abertas mantêm-se, mas só são vigiadas com o bot a correr.
+2026-09-29 00:21:56 INFO    Aplicação iniciada em http://127.0.0.1:8765/
+2026-09-29 00:22:29 INFO    Radar: 25 moedas analisadas em 15s | melhores: LINK 63, HBAR 63, RUNE 63, XLM 63, ALGO 63
+2026-09-29 00:22:57 INFO    Notícias: 213 manchetes de 12/13 sites
+2026-09-29 00:24:16 INFO    Bot iniciado | MODO TESTE | pares BTC/USDC, ETH/USDC, SOL/USDC | timeframe 1h | modelo gpt-5.5
+2026-09-29 00:25:08 INFO    Radar: 25 moedas analisadas em 16s | melhores: LINK 63, HBAR 63, RUNE 63, XLM 63, ALGO 63
+2026-09-29 00:25:09 INFO    === Análise | MODO TESTE | capital 10000.00 USDC | posições: nenhuma | a analisar: BTC, ETH, SOL, LINK*, HBAR*, RUNE* ===
+2026-09-29 00:25:13 INFO    Notícias: 221 manchetes de 13/13 sites
+2026-09-29 00:25:14 INFO    BTC/USDC @ 83490.6 -> sem setup técnico (pontuação 27): IA não consultada
+2026-09-29 00:25:28 INFO    Notícias ETH: neutral (0.08) | 8 manchetes próprias
+2026-09-29 00:26:04 INFO    ETH/USDC: ordem pendente BUY_STOP a 2721 (stop 2688, alvo 2807.5)
+2026-09-29 00:26:04 INFO    ETH/USDC @ 2687.64 -> BUY_STOP (conf 0.59, 1/1, 35s) => ordem pendente: comprar se o preço subir até 2721 (stop 2688, alvo 2807.5)
+2026-09-29 00:26:04 INFO       motivo: Não compro já no meio do range; prefiro exigir rompimento claro do máximo de 20 períodos em 2720. Um BUY_STOP em 2721 confirma força e evita entrar antes da resistência, com stop abaixo da zona de falha do breakout e alvo no máximo diário recente.
+2026-09-29 00:26:15 INFO    Notícias SOL: bullish (0.55) | 3 manchetes próprias
+2026-09-29 00:26:50 INFO    SOL/USDC: ordem pendente BUY_STOP a 119.93 (stop 117.12, alvo 125.2)
+2026-09-29 00:26:50 INFO    SOL/USDC @ 118.74 -> BUY_STOP (conf 0.59, 1/1, 35s) => ordem pendente: comprar se o preço subir até 119.93 (stop 117.12, alvo 125.2)
+2026-09-29 00:26:50 INFO       motivo: Uso BUY_STOP em vez de compra imediata porque o preço ainda está abaixo das EMAs 20/50 de 1h e dentro do range 117,2–120,7. A entrada acima de 119,93 confirma rompimento inicial; o stop fica abaixo dos mínimos recentes e o alvo procura reteste/extensão da zona de 124,95–125,20, mantendo R/R aceitável após custos.
+2026-09-29 00:27:00 INFO    Notícias LINK: bullish (0.72) | 4 manchetes próprias
+2026-09-29 00:27:14 INFO    LINK/USDC: ordem pendente BUY_STOP a 15.5364 (stop 14.8701, alvo 16.75)
+2026-09-29 00:27:14 INFO    LINK/USDC @ 15.379 -> BUY_STOP (conf 0.60, 1/1, 13s) => ordem pendente: comprar se o preço subir até 15.5364 (stop 14.8701, alvo 16.75)
+2026-09-29 00:27:14 INFO       motivo: Não compro a mercado porque está perto da resistência e já afastado da EMA20; a melhor assimetria é exigir confirmação acima do máximo de 20 períodos. O BUY_STOP aproveita continuação se o catalisador mantiver pressão compradora, com stop abaixo da zona de invalidação intradiária e alvo ajustado para manter R/R líquido aceitável.
+2026-09-29 00:27:25 INFO    Notícias HBAR: neutral (-0.18) | 1 manchetes próprias
+2026-09-29 00:27:35 INFO    HBAR/USDC: ordem pendente BUY_LIMIT a 0.116665 (stop 0.106684, alvo 0.135843)
+2026-09-29 00:27:35 INFO    HBAR/USDC @ 0.12224 -> BUY_LIMIT (conf 0.60, 1/1, 11s) => ordem pendente: comprar se o preço descer até 0.116665 (stop 0.106684, alvo 0.135843)
+2026-09-29 00:27:35 INFO       motivo: Não compro a mercado porque o preço está acima da EMA20/VWAP e o 15m perdeu momentum. A setup quantitativa de compra no recuo é válida: entrada perto da EMA20 de 1h, stop abaixo da EMA50/estrutura e alvo acima do máximo recente, com R/R suficiente. Usar ordem limitada transforma a espera por pullback numa oportunidade controlada.
+2026-09-29 00:27:47 INFO    Notícias RUNE: bearish (-0.62) | 5 manchetes próprias
+2026-09-29 00:27:58 INFO    RUNE/USDC @ 0.775 -> HOLD (conf 0.62, 1/1, 12s) => sem ação
+2026-09-29 00:27:58 INFO       motivo: Apesar do setup quantitativo de compra no recuo ter RR aceitável, o catalisador noticioso é hostil e reduz a probabilidade de continuação limpa. Sem posição aberta, prefiro não colocar ordem pendente enquanto o risco de nova pressão vendedora por manchetes continua elevado.
+2026-09-29 00:30:19 INFO    Aplicação iniciada em http://127.0.0.1:8765/
+2026-09-29 00:30:20 INFO    Notícias: 220 manchetes de 13/13 sites
+2026-09-29 00:30:42 ERROR   Exception in callback _ProactorBasePipeTransport._call_connection_lost(None)
+handle: <Handle _ProactorBasePipeTransport._call_connection_lost(None)>
+Traceback (most recent call last):
+  File "C:\Users\PC\AppData\Local\Programs\Python\Python312\Lib\asyncio\events.py", line 84, in _run
+    self._context.run(self._callback, *self._args)
+  File "C:\Users\PC\AppData\Local\Programs\Python\Python312\Lib\asyncio\proactor_events.py", line 165, in _call_connection_lost
+    self._sock.shutdown(socket.SHUT_RDWR)
+ConnectionResetError: [WinError 10054] An existing connection was forcibly closed by the remote host
+2026-09-29 00:31:18 INFO    Aplicação iniciada em http://127.0.0.1:8765/
+2026-09-29 00:31:22 INFO    Notícias: 220 manchetes de 13/13 sites
+2026-09-29 00:36:03 INFO    Aplicação iniciada em http://127.0.0.1:8765/
+2026-09-29 00:36:04 INFO    Notícias: 220 manchetes de 13/13 sites
+2026-09-29 00:37:25 INFO    Bot iniciado | MODO TESTE | pares BTC/USDC, ETH/USDC, SOL/USDC | timeframe 1h | modelo gpt-5.5
+2026-09-29 00:41:47 INFO    Bot parado. As posições abertas mantêm-se, mas só são vigiadas com o bot a correr.
+2026-09-29 00:50:33 INFO    Aplicação iniciada em http://127.0.0.1:8765/
+2026-09-29 00:50:35 INFO    Notícias: 220 manchetes de 13/13 sites
+2026-09-29 00:50:52 INFO    Bot iniciado | MODO TESTE | pares BTC/USDC, ETH/USDC, SOL/USDC | timeframe 1h | modelo gpt-5.5
+2026-09-29 00:51:13 INFO    Radar: 33 moedas em 20s | mercado misto (18% a subir) | melhores: LINK 63, RUNE 63, XLM 63, ALGO 63, ETH 61
+2026-09-29 00:51:15 INFO    Notícias: 220 manchetes de 13/13 sites
+2026-09-29 00:51:18 INFO    IA gestora (normal): Mercado misto com BTC lateral e apetite selectivo para força relativa. | escolhidas: LINK, ALGO, NEAR
+2026-09-29 00:51:19 INFO    === Análise | MODO TESTE | capital 10000.00 USDC | posições: nenhuma | a analisar: LINK*, ALGO*, NEAR* ===
+2026-09-29 00:51:30 INFO    Notícias LINK: very_bullish (0.72) | 4 manchetes próprias
+2026-09-29 00:51:44 INFO    LINK/USDC @ 15.448 -> HOLD (conf 0.60, 1/1, 13s) => sem ação (ordem pendente mantida)
+2026-09-29 00:51:44 INFO       motivo: Não compro a mercado porque o preço está mesmo junto à resistência de 15.486 e já afastado da EMA20, reduzindo a assimetria. A melhor decisão é manter o BUY_STOP existente em 15.5364, pois só entra com confirmação de força e ainda oferece R/R líquido aceitável. Se o rompimento falhar, evita-se comprar a exaustão.
+2026-09-29 00:51:55 INFO    Notícias ALGO: bearish (-0.15) | 0 manchetes próprias
+2026-09-29 00:52:07 INFO    ALGO/USDC: ordem pendente BUY_LIMIT a 0.130061 (stop 0.123685, alvo 0.143551)
+2026-09-29 00:52:07 INFO    ALGO/USDC @ 0.1348 -> BUY_LIMIT (conf 0.59, 1/1, 12s) => ordem pendente: comprar se o preço descer até 0.130061 (stop 0.123685, alvo 0.143551)
+2026-09-29 00:52:07 INFO       motivo: Não compro a mercado porque o preço está acima da EMA20 e longe do VWAP, mas o pullback para ~0.1300 coincide com suporte intraday e EMA20 de 1h. O plano quantitativo tem stop a ~1,5 ATR e alvo acima do máximo recente, com R/R aceitável após custos. Contexto macro/notícias não bloqueia, mas reduz a convicção.
+2026-09-29 00:52:17 INFO    Notícias NEAR: bullish (0.76) | 2 manchetes próprias
+2026-09-29 00:52:35 INFO    NEAR/USDC: ordem pendente BUY_STOP a 4.835 (stop 4.621, alvo 5.248)
+2026-09-29 00:52:35 INFO    NEAR/USDC @ 4.809 -> BUY_STOP (conf 0.59, 1/1, 18s) => ordem pendente: comprar se o preço subir até 4.835 (stop 4.621, alvo 5.248)
+2026-09-29 00:52:35 INFO       motivo: Prefiro não comprar a mercado enquanto o preço está a testar resistência; a entrada faz mais sentido apenas se houver continuação acima da zona 4,82/4,83. O stop fica abaixo do fundo/invalidade recente e o alvo fica antes da resistência superior de 5,21–5,30, mantendo R:R líquido aceitável.
+2026-09-29 00:54:07 INFO    Aplicação iniciada em http://127.0.0.1:8765/
+2026-09-29 00:54:09 INFO    Notícias: 220 manchetes de 13/13 sites
+2026-09-29 00:54:09 WARNING Calendário económico indisponível: Expecting value: line 1 column 1 (char 0)
+2026-09-29 00:55:23 INFO    Bot iniciado | MODO TESTE | moedas: escolha automática entre as 40 mais negociadas | timeframe 1h | perfil equilibrado | modelo gpt-5.5
+2026-09-29 01:00:38 INFO    Radar: 32 moedas em 18s | mercado favorável (22% a subir) | melhores: XLM 67, PUMP 66, LINK 63, HBAR 63, RUNE 63
+2026-09-29 01:00:41 INFO    Notícias: 220 manchetes de 13/13 sites
+2026-09-29 01:00:44 INFO    IA gestora (aggressive): Regime favorável ao risco, mas com PCE e GDP amanhã a poderem travar movimentos; prefiro força relativa e setups com espaço para andar. | escolhidas: LINK, HBAR, ALGO
+2026-09-29 01:00:44 INFO    === Análise | MODO TESTE | capital 10000.00 USDC | posições: nenhuma | a analisar: LINK*, HBAR*, ALGO* ===
+2026-09-29 01:00:56 INFO    Notícias LINK: bullish (0.72) | 4 manchetes próprias
+2026-09-29 01:01:11 INFO    LINK/USDC @ 15.444 -> HOLD (conf 0.61, 1/1, 14s) => sem ação (ordem pendente mantida)
+2026-09-29 01:01:11 INFO       motivo: Não compro a mercado porque a entrada está colada à resistência e com assimetria pior após uma subida forte. A ordem BUY_STOP pendente em 15.5364 continua alinhada com o setup de rompimento e só entra se houver confirmação acima do máximo recente, mantendo R/R aceitável. O contexto noticioso e a tendência favorecem manter a ordem, mas a sobrecompra impede aumentar agressividade.
+2026-09-29 01:01:24 INFO    Notícias HBAR: neutral (-0.05) | 1 manchetes próprias
+2026-09-29 01:01:38 INFO    HBAR/USDC @ 0.12218 -> HOLD (conf 0.62, 1/1, 13s) => sem ação (ordem pendente mantida)
+2026-09-29 01:01:38 INFO       motivo: Não há vantagem em comprar a mercado depois de uma subida muito vertical e com preço ainda acima da EMA20 de 1h/VWAP. A ordem limitada pendente perto de 0.1167 continua alinhada com a setup quantitativa de pullback, tem stop a cerca de 2.1 ATR e R/R suficiente. Manter a ordem é preferível a cancelar, pois a tendência principal ainda é forte e o mercado está em regime favorável.
+2026-09-29 01:01:47 INFO    Notícias ALGO: bearish (-0.18) | 0 manchetes próprias
+2026-09-29 01:02:08 INFO    ALGO/USDC @ 0.1356 -> HOLD (conf 0.61, 1/1, 21s) => sem ação (ordem pendente mantida)
+2026-09-29 01:02:08 INFO       motivo: Não há vantagem em comprar a mercado junto à resistência de 0.1393 e longe da EMA20/VWAP. A ordem pendente existente perto de 0.1300 continua alinhada com o setup quantitativo de pullback, com stop a cerca de 1.5 ATR e R/R superior a 2 antes de custos. Prefiro manter essa ordem em vez de perseguir o rompimento enquanto o volume não confirma.
+2026-09-29 01:03:30 INFO    COMPRA LINK/USDC: 0.699776 @ 15.5458 (10.89 USDC) | stop 14.8701 | TP 16.75 | R:R 1.63 | conf 0.60
+2026-09-29 01:03:30 INFO    LINK/USDC: ordem BUY_STOP disparada a 15.538 -> COMPRADO 0.699776 @ 15.5458 (stop 14.8701, TP 16.75)
+2026-09-29 01:17:59 INFO    Notícias: 221 manchetes de 13/13 sites
+2026-09-29 01:34:01 INFO    COMPRA NEAR/USDC: 2.16909 @ 4.83942 (10.51 USDC) | stop 4.621 | TP 5.248 | R:R 1.72 | conf 0.59
+2026-09-29 01:34:01 INFO    NEAR/USDC: ordem BUY_STOP disparada a 4.837 -> COMPRADO 2.16909 @ 4.83942 (stop 4.621, TP 5.248)
+2026-09-29 02:00:37 INFO    Radar: 32 moedas em 17s | mercado favorável (22% a subir) | melhores: LINK 63, RUNE 63, XLM 63, ALGO 63, ETH 61
+2026-09-29 02:00:39 INFO    Notícias: 220 manchetes de 13/13 sites
+2026-09-29 02:00:42 INFO    IA gestora (aggressive): O regime é favorável e o BTC está em tendência de alta, pelo que procuro setups com força relativa e sem sinais de exaustão. | escolhidas: ALGO, XLM, RUNE
+2026-09-29 02:00:43 INFO    === Análise | MODO TESTE | capital 9999.77 USDC | posições: LINK/USDC, NEAR/USDC | a analisar: LINK, NEAR, ALGO*, XLM*, RUNE* ===
+2026-09-29 02:01:09 INFO    LINK/USDC @ 15.431 -> HOLD (conf 0.59, 1/1, 23s) => sem ação
+2026-09-29 02:01:09 INFO       motivo: Apesar do alerta de falso rompimento, ainda não houve quebra estrutural nem venda forte com volume; o preço continua acima da zona de suporte intradiária e do stop inicial. Como a tese de força de médio prazo e o catalisador permanecem válidos, mantenho a posição, mas sem subir o stop para evitar ser expulso por ruído normal.
+2026-09-29 02:01:18 INFO    Notícias NEAR: bullish (0.42) | 2 manchetes próprias
+2026-09-29 02:01:50 INFO    VENDA NEAR/USDC (sinal_ia): @ 4.77661 | PnL -0.16 USDC (-1.50%, -0.32R)
+2026-09-29 02:01:50 INFO    NEAR/USDC @ 4.779 -> SELL (conf 0.62, 1/1, 32s) => posição fechada (PnL -0.16 USDC)
+2026-09-29 02:01:50 INFO       motivo: A tese da entrada era continuação acima de 4,82/4,83, mas o preço rejeitou essa zona e voltou a negociar abaixo dela. Como a posição ainda está com perda pequena e o contexto intradiário é fraco, é preferível cortar agora e reavaliar novo BUY_STOP se houver recuperação limpa.
+2026-09-29 02:01:58 INFO    Notícias ALGO: neutral (-0.12) | 0 manchetes próprias
+2026-09-29 02:02:09 INFO    ALGO/USDC @ 0.1355 -> HOLD (conf 0.61, 1/1, 11s) => sem ação (ordem pendente mantida)
+2026-09-29 02:02:09 INFO       motivo: Não compro a mercado junto à resistência 0.1393 e acima do VWAP/EMA20; o volume de 1h não confirma continuação imediata. A ordem limite existente perto de 0.1300 continua melhor do que perseguir o preço e respeita stop por ATR e alvo realista. Notícias/macro não bloqueiam agora, mas o contexto global fraco e eventos nas próximas sessões pedem disciplina.
+2026-09-29 02:02:17 INFO    Notícias XLM: bullish (0.23) | 1 manchetes próprias
+2026-09-29 02:02:29 INFO    XLM/USDC: ordem pendente BUY_LIMIT a 0.223369 (stop 0.215316, alvo 0.240069)
+2026-09-29 02:02:29 INFO    XLM/USDC @ 0.2282 -> BUY_LIMIT (conf 0.60, 1/1, 11s) => ordem pendente: comprar se o preço descer até 0.223369 (stop 0.215316, alvo 0.240069)
+2026-09-29 02:02:29 INFO       motivo: Prefiro a ordem BUY_LIMIT do setup quantitativo em 0,223369, junto da EMA20 de 1h e do suporte 0,2233, em vez de perseguir o preço actual. O stop em 0,215316 fica abaixo da zona de suporte/estrutura e a distância é cerca de 1,5 ATR, válida pelas regras; o alvo em 0,240069 mantém R/R bruto ~2,07, suficiente após custos. O contexto é construtivo, mas a divergência e o BTC fraco reduzem a confiança para uma entrada imediata ou breakout agressivo.
+2026-09-29 02:02:36 INFO    Notícias RUNE: bearish (-0.22) | 5 manchetes próprias
+2026-09-29 02:02:47 INFO    RUNE/USDC: ordem pendente BUY_LIMIT a 0.763118 (stop 0.737911, alvo 0.817805)
+2026-09-29 02:02:47 INFO    RUNE/USDC @ 0.78 -> BUY_LIMIT (conf 0.59, 1/1, 10s) => ordem pendente: comprar se o preço descer até 0.763118 (stop 0.737911, alvo 0.817805)
+2026-09-29 02:02:47 INFO       motivo: Não quero comprar a mercado porque o preço está esticado face à EMA20 e sem volume de confirmação, mas o pullback quantitativo é válido e alinha com a tendência. A ordem limite transforma a espera por recuo numa entrada com risco controlado; prefiro esta ao breakout porque a resistência em 0,801 pode falhar com notícias hostis.
+2026-09-29 02:30:22 INFO    COMPRA RUNE/USDC: 18.2628 @ 0.763381 (13.96 USDC) | stop 0.737911 | TP 0.817805 | R:R 1.92 | conf 0.59
+2026-09-29 02:30:22 INFO    RUNE/USDC: ordem BUY_LIMIT disparada a 0.763 -> COMPRADO 18.2628 @ 0.763381 (stop 0.737911, TP 0.817805)
+2026-09-29 03:00:39 INFO    Radar: 31 moedas em 19s | mercado favorável (19% a subir) | melhores: LINK 63, XLM 63, SOL 58, ADA 58, TAO 58
+2026-09-29 03:00:40 INFO    Notícias: 223 manchetes de 13/13 sites
+2026-09-29 03:00:45 INFO    IA gestora (normal): Mercado favorável e com BTC em alta, mas a alargada ainda é misturada e há eventos macro relevantes a curto prazo. | escolhidas: XLM, SOL, NEAR
+2026-09-29 03:00:45 INFO    === Análise | MODO TESTE | capital 9999.80 USDC | posições: LINK/USDC, RUNE/USDC | a analisar: LINK, RUNE, XLM*, SOL*, NEAR* ===
+2026-09-29 03:00:54 INFO    Notícias LINK: bullish (0.74) | 4 manchetes próprias
+2026-09-29 03:01:07 INFO    LINK/USDC @ 15.249 -> HOLD (conf 0.59, 1/1, 12s) => sem ação
+2026-09-29 03:01:07 INFO       motivo: Com posição aberta, ainda não há quebra estrutural confirmada nem venda forte com volume; a zona de invalidação continua perto do stop em 14.8701. Vender agora cristalizaria uma perda antes do teste da EMA20/suporte, mas não há base para subir o stop porque o preço está abaixo da entrada.
+2026-09-29 03:01:21 INFO    RUNE/USDC @ 0.774 -> HOLD (conf 0.63, 1/1, 11s) => sem ação
+2026-09-29 03:01:21 INFO       motivo: A posição está levemente positiva, mas ainda só em ~0,42R, sem sinal técnico suficiente para vender nem para subir o stop de forma robusta. A tese de pullback em tendência continua válida enquanto 0,743/EMA50 1h não for perdido em fecho; manter é melhor do que sair antes da confirmação de falha.
+2026-09-29 03:01:42 INFO    XLM/USDC @ 0.2279 -> HOLD (conf 0.61, 1/1, 18s) => sem ação (ordem pendente mantida)
+2026-09-29 03:01:42 INFO       motivo: Prefiro manter a BUY_LIMIT já existente em 0,223369, junto da EMA20 de 1h e suporte 0,2233, em vez de trocar para um breakout com risco de falso rompimento. O plano de pullback continua com melhor assimetria e evita perseguir o preço após forte subida recente. Sem posição aberta, não há razão para cancelar a ordem enquanto a estrutura de alta se mantiver.
+2026-09-29 03:01:53 INFO    Notícias SOL: bullish (0.52) | 3 manchetes próprias
+2026-09-29 03:02:21 INFO    SOL/USDC @ 117.23 -> HOLD (conf 0.62, 1/1, 28s) => sem ação (ordem pendente mantida)
+2026-09-29 03:02:21 INFO       motivo: Não há qualidade suficiente para comprar agora nem para baixar o gatilho para 117,96, pois isso entraria ainda abaixo das EMAs principais de 1h/15m. A ordem pendente existente acima de 119,93 é mais selectiva e só compra se houver recuperação clara da resistência e das EMAs, mantendo R/R aceitável. Assim, mantenho a ordem pendente em vez de perseguir um ressalto fraco.
+2026-09-29 03:02:32 INFO    Notícias NEAR: bullish (0.43) | 3 manchetes próprias
+2026-09-29 03:02:57 INFO    NEAR/USDC: ordem pendente BUY_STOP a 4.845 (stop 4.58, alvo 5.365)
+2026-09-29 03:02:57 INFO    NEAR/USDC @ 4.694 -> BUY_STOP (conf 0.58, 1/1, 25s) => ordem pendente: comprar se o preço subir até 4.845 (stop 4.58, alvo 5.365)
+2026-09-29 03:02:57 INFO       motivo: Não compro a mercado porque o momentum intradiário ainda é fraco; a ideia só fica válida se houver rompimento claro acima da resistência curta em 4,83/4,84. O BUY_STOP exige confirmação e mantém R:R aceitável com stop abaixo dos mínimos recentes.
+2026-09-29 03:30:32 INFO    COMPRA XLM/USDC: 57.7774 @ 0.223412 (12.92 USDC) | stop 0.215316 | TP 0.240069 | R:R 1.86 | conf 0.60
+2026-09-29 03:30:32 INFO    XLM/USDC: ordem BUY_LIMIT disparada a 0.2233 -> COMPRADO 57.7774 @ 0.223412 (stop 0.215316, TP 0.240069)
+2026-09-29 04:00:38 INFO    Radar: 31 moedas em 18s | mercado favorável (19% a subir) | melhores: XLM 63, RUNE 61, SOL 58, ADA 58, TAO 58
+2026-09-29 04:00:40 INFO    Notícias: 225 manchetes de 13/13 sites
+2026-09-29 04:00:43 INFO    IA gestora (aggressive): O regime está favorável e o BTC sobe, por isso ainda faz sentido procurar continuations com boa força relativa. | escolhidas: SOL, TAO, AVAX
+2026-09-29 04:00:44 INFO    === Análise | MODO TESTE | capital 9999.53 USDC | posições: LINK/USDC, RUNE/USDC, XLM/USDC | a analisar: LINK, RUNE, XLM, SOL*, TAO*, AVAX* ===
+2026-09-29 04:01:01 INFO    LINK/USDC @ 15.046 -> HOLD (conf 0.57, 1/1, 13s) => sem ação
+2026-09-29 04:01:01 INFO       motivo: Com posição aberta, a tese está pressionada mas ainda não há fecho claro abaixo da EMA20 de 1h nem venda forte com volume; o stop em 14.8701 continua a proteger a invalidação principal. Vender agora perto de suporte/EMA20 pode cristalizar perda antes de uma reacção, mas não há motivo para subir o stop porque o trade está negativo.
+2026-09-29 04:01:13 INFO    Notícias RUNE: bearish (-0.62) | 5 manchetes próprias
+2026-09-29 04:01:24 INFO    RUNE/USDC @ 0.762 -> HOLD (conf 0.60, 1/1, 10s) => sem ação
+2026-09-29 04:01:24 INFO       motivo: A tese original era comprar o recuo dentro da tendência e, por enquanto, não houve invalidação em fecho; vender agora seria sair praticamente no ponto de entrada antes do suporte-chave ser testado. Não há base para subir o stop, pois ainda não existe novo fundo ascendente confirmado nem ganho suficiente.
+2026-09-29 04:01:38 INFO    Notícias XLM: bullish (0.22) | 1 manchetes próprias
+2026-09-29 04:01:48 INFO    XLM/USDC @ 0.2252 -> HOLD (conf 0.62, 1/1, 10s) => sem ação
+2026-09-29 04:01:48 INFO       motivo: Como já há posição aberta e o preço está apenas a ~0,22R, ainda não faz sentido subir o stop para break-even nem vender sem quebra estrutural. O plano original de pullback continua válido enquanto 0,2153/0,2157 aguentar, com alvo ainda realista perto de 0,2401. Manter é preferível a reagir ao ruído intradiário, mas com cautela por causa da divergência e do mercado cripto misto.
+2026-09-29 04:02:19 INFO    SOL/USDC: ordem pendente BUY_STOP a 119.75 (stop 117.1, alvo 125.2)
+2026-09-29 04:02:19 INFO    SOL/USDC @ 116.98 -> BUY_STOP (conf 0.59, 1/1, 28s) => ordem pendente: comprar se o preço subir até 119.75 (stop 117.1, alvo 125.2)
+2026-09-29 04:02:19 INFO       motivo: Não compro a mercado porque ainda não há reversão confirmada e o preço está abaixo das EMAs 20/50 de 1h. Prefiro renovar o gatilho de rompimento acima de 119,75, onde o preço recupera resistência e momentum; o alvo é o reteste da zona 124,95–125,20 e o stop fica abaixo do suporte/reclaim falhado.
+2026-09-29 04:02:31 INFO    Notícias TAO: bullish (0.25) | 0 manchetes próprias
+2026-09-29 04:02:53 INFO    TAO/USDC: ordem pendente BUY_STOP a 305.25 (stop 290.598, alvo 334.555)
+2026-09-29 04:02:53 INFO    TAO/USDC @ 297.9 -> BUY_STOP (conf 0.58, 1/1, 22s) => ordem pendente: comprar se o preço subir até 305.25 (stop 290.598, alvo 334.555)
+2026-09-29 04:02:53 INFO       motivo: Não compro ao mercado porque o momentum curto prazo ainda é bearish. Aceito apenas a entrada pendente por rompimento acima de 305.25 USDC, que confirma recuperação da resistência/EMA20 e mantém relação risco-retorno aceitável até à zona de 333-335 USDC.
+2026-09-29 04:03:04 INFO    Notícias AVAX: bearish (-0.45) | 0 manchetes próprias
+2026-09-29 04:03:40 INFO    AVAX/USDC: ordem pendente BUY_STOP a 10.62 (stop 10.18, alvo 11.46)
+2026-09-29 04:03:40 INFO    AVAX/USDC @ 10.381 -> BUY_STOP (conf 0.59, 1/1, 36s) => ordem pendente: comprar se o preço subir até 10.62 (stop 10.18, alvo 11.46)
+2026-09-29 04:03:40 INFO       motivo: Rejeito a entrada original em 10.4387 por estar demasiado perto da resistência e ainda abaixo das EMAs, mas aceito uma compra stop apenas se houver recuperação clara acima de 10.62. O stop fica abaixo do suporte de 10.20 e o alvo dá RR bruto perto de 1.9, suficiente após custos.
+2026-09-29 04:15:16 INFO    VENDA LINK/USDC (stop_loss): @ 14.8336 | PnL -0.52 USDC (-4.77%, -1.07R)
+2026-09-29 04:25:09 INFO    ETH/USDC: ordem pendente removida (expirou)
+2026-09-29 04:25:09 INFO    HBAR/USDC: ordem pendente removida (expirou)
+2026-09-29 04:51:02 INFO    ALGO/USDC: ordem pendente removida (expirou)
+2026-09-29 05:00:38 INFO    Radar: 31 moedas em 18s | mercado misto (19% a subir) | melhores: PUMP 64, XLM 63, ALGO 63, AERO 63, SOL 58
+2026-09-29 05:00:40 INFO    Notícias: 223 manchetes de 13/13 sites
+2026-09-29 05:00:43 INFO    IA gestora (normal): Mercado misto com BTC lateral e breadth fraca, por isso só vale focar em setups com força relativa e tendência maior favorável. | escolhidas: ALGO, AERO, SOL
+2026-09-29 05:00:43 INFO    === Análise | MODO TESTE | capital 9999.57 USDC | posições: RUNE/USDC, XLM/USDC | a analisar: RUNE, XLM, ALGO*, AERO*, SOL* ===
+2026-09-29 05:00:56 INFO    RUNE/USDC @ 0.769 -> HOLD (conf 0.60, 1/1, 9s) => sem ação
+2026-09-29 05:00:56 INFO       motivo: A posição está apenas ligeiramente positiva e ainda longe de +1R, por isso não há base técnica para subir o stop. Também não há invalidação clara em fecho nem venda com volume que justifique sair já; o plano original continua válido enquanto a zona 0,743/EMA50 1h se mantiver.
+2026-09-29 05:01:09 INFO    XLM/USDC @ 0.2263 -> HOLD (conf 0.62, 1/1, 11s) => sem ação
+2026-09-29 05:01:09 INFO       motivo: Com posição aberta e sem quebra estrutural, vender agora seria antecipar fraqueza que ainda não confirmou. Também não faz sentido subir o stop antes de +1R; manter o stop original abaixo do suporte preserva o plano e evita ruído intradiário. A gestão deve continuar defensiva devido ao BTC fraco e à baixa participação de volume.
+2026-09-29 05:01:19 INFO    Notícias ALGO: neutral (-0.18) | 0 manchetes próprias
+2026-09-29 05:01:31 INFO    ALGO/USDC: ordem pendente BUY_LIMIT a 0.132084 (stop 0.125761, alvo 0.144731)
+2026-09-29 05:01:31 INFO    ALGO/USDC @ 0.1358 -> BUY_LIMIT (conf 0.59, 1/1, 12s) => ordem pendente: comprar se o preço descer até 0.132084 (stop 0.125761, alvo 0.144731)
+2026-09-29 05:01:31 INFO       motivo: Não compro a mercado junto à resistência de 0.1393 e acima da EMA20/VWAP, sobretudo com volume de 1h fraco. Prefiro a ordem limite no recuo para a EMA20 de 1h, alinhada com o setup quantitativo, stop a cerca de 1.5 ATR e alvo antes da zona de extensão. O contexto macro/notícias é neutro a ligeiramente negativo, por isso a convicção é moderada.
+2026-09-29 05:01:40 INFO    Notícias AERO: bearish (-0.24) | 0 manchetes próprias
+2026-09-29 05:01:50 INFO    AERO/USDC: ordem pendente BUY_STOP a 0.834223 (stop 0.802719, alvo 0.897231)
+2026-09-29 05:01:50 INFO    AERO/USDC @ 0.8219 -> BUY_STOP (conf 0.59, 1/1, 10s) => ordem pendente: comprar se o preço subir até 0.834223 (stop 0.802719, alvo 0.897231)
+2026-09-29 05:01:50 INFO       motivo: Não compro a mercado porque o preço ainda está abaixo da resistência imediata e o contexto macro/mercado pede confirmação. A ordem BUY_STOP usa o setup quantitativo, com stop abaixo da zona de falha do rompimento e R/R bruto ~2, suficiente após custos.
+2026-09-29 05:02:02 INFO    Notícias SOL: bullish (0.42) | 2 manchetes próprias
+2026-09-29 05:02:18 INFO    SOL/USDC @ 117.69 -> HOLD (conf 0.61, 1/1, 16s) => sem ação (ordem pendente mantida)
+2026-09-29 05:02:18 INFO       motivo: Não compro a mercado porque ainda estamos dentro do range e abaixo de resistências relevantes; o gatilho pendente acima de 119,75 continua a ser mais selectivo do que antecipar o ressalto. Um rompimento dessa zona recuperaria EMA50 de 1h e resistência, mantendo R/R aceitável para retestar 124,95–125,20. Assim, mantenho a ordem pendente existente em vez de a baixar para 118,61, que seria demasiado cedo neste contexto fraco.
+2026-09-29 06:00:37 INFO    Radar: 28 moedas em 17s | mercado misto (21% a subir) | melhores: PUMP 72, RUNE 71, XLM 63, ALGO 63, AERO 63
+2026-09-29 06:00:39 INFO    Notícias: 224 manchetes de 13/13 sites
+2026-09-29 06:00:42 INFO    IA gestora (normal): Mercado misto, com BTC lateral e breadth fraca, por isso só vale focar em setups com força relativa e tendência maior alinhada. | escolhidas: ALGO, AERO, SOL
+2026-09-29 06:00:43 INFO    === Análise | MODO TESTE | capital 9999.66 USDC | posições: RUNE/USDC, XLM/USDC | a analisar: RUNE, XLM, ALGO*, AERO*, SOL* ===
+2026-09-29 06:00:52 INFO    Notícias RUNE: bearish (-0.62) | 5 manchetes próprias
+2026-09-29 06:01:01 INFO    RUNE/USDC @ 0.776 -> HOLD (conf 0.62, 1/1, 8s) => sem ação
+2026-09-29 06:01:01 INFO       motivo: Não há invalidação técnica em fecho: o preço recuperou acima da entrada e mantém estrutura de pullback em tendência. Ainda não há ganho suficiente para mover o stop para break-even ou para um novo fundo lógico sem aumentar demasiado o risco de stop prematuro. Manter a posição é preferível, mas com atenção a nova manchete negativa ou perda da zona 0,743/EMA50 1h.
+2026-09-29 06:01:10 INFO    Notícias XLM: bullish (0.35) | 1 manchetes próprias
+2026-09-29 06:01:20 INFO    XLM/USDC @ 0.2257 -> HOLD (conf 0.63, 1/1, 10s) => sem ação
+2026-09-29 06:01:20 INFO       motivo: Há posição aberta ainda só a cerca de 0,28R, sem quebra estrutural nem sinal suficiente para vender. O stop original abaixo de 0,2157 continua lógico; subir agora o stop seria prematuro e poderia ser ruído intradiário. Mantém-se o plano até confirmação de continuação para 0,2401 ou invalidação do suporte.
+2026-09-29 06:01:27 INFO    Notícias ALGO: bearish (-0.18) | 0 manchetes próprias
+2026-09-29 06:01:46 INFO    ALGO/USDC: ordem pendente BUY_LIMIT a 0.132851 (stop 0.126368, alvo 0.145815)
+2026-09-29 06:01:46 INFO    ALGO/USDC @ 0.1392 -> BUY_LIMIT (conf 0.59, 1/1, 18s) => ordem pendente: comprar se o preço descer até 0.132851 (stop 0.126368, alvo 0.145815)
+2026-09-29 06:01:46 INFO       motivo: Não compro a mercado junto aos máximos e à banda superior, sobretudo com volume de 1h apenas normal e taker buy sem grande força. Prefiro ajustar/manter a ideia de compra no recuo para a EMA20 de 1h, usando stop a cerca de 1,5 ATR e alvo realista acima dos máximos recentes. O contexto macro/notícias reduz a convicção, mas a tendência e a força relativa justificam a ordem pendente.
+2026-09-29 06:01:54 INFO    Notícias AERO: bullish (0.22) | 0 manchetes próprias
+2026-09-29 06:02:05 INFO    AERO/USDC @ 0.825 -> HOLD (conf 0.60, 1/1, 10s) => sem ação (ordem pendente mantida)
+2026-09-29 06:02:05 INFO       motivo: Não há razão para cancelar a ordem pendente: a tese continua válida, mas comprar agora antes do rompimento teria pior assimetria. A BUY_STOP existente perto de 0,834 está alinhada com o setup quantitativo, com stop abaixo da zona de falha e R/R bruto ~2. Aguardar confirmação é preferível devido ao volume ainda moderado e ao contexto de mercado frágil.
+2026-09-29 06:02:12 INFO    Notícias SOL: bullish (0.61) | 2 manchetes próprias
+2026-09-29 06:02:23 INFO    SOL/USDC @ 117.7 -> HOLD (conf 0.62, 1/1, 11s) => sem ação (ordem pendente mantida)
+2026-09-29 06:02:23 INFO       motivo: Não compro agora nem baixo o gatilho para 117,95, porque isso entraria ainda dentro do range e abaixo de resistências/EMAs importantes. A ordem pendente existente em 119,75 continua melhor: só ativa se SOL recuperar a zona de resistência/EMA50 1h e confirmar força para retestar 124,95–125,20 com R/R aceitável. Assim, mantenho a ordem pendente e evito antecipar um rompimento fraco com volume baixo.
+2026-09-29 06:24:51 INFO    RUNE/USDC: stop automático subiu para 0.765672
+2026-09-29 06:44:56 INFO    COMPRA AVAX/USDC: 1.04629 @ 10.6313 (11.13 USDC) | stop 10.18 | TP 11.46 | R:R 1.68 | conf 0.59
+2026-09-29 06:44:56 INFO    AVAX/USDC: ordem BUY_STOP disparada a 10.626 -> COMPRADO 1.04629 @ 10.6313 (stop 10.18, TP 11.46)
+2026-09-29 06:54:27 INFO    AERO/USDC: ordem BUY_STOP disparada a 0.8345 -> bloqueado: máximo de 3 posições abertas
+2026-09-29 07:00:36 INFO    Radar: 28 moedas em 16s | mercado misto (25% a subir) | melhores: LINK 79, PUMP 75, RUNE 67, XLM 63, AVAX 61
+2026-09-29 07:00:38 INFO    Notícias: 224 manchetes de 13/13 sites
+2026-09-29 07:00:42 INFO    IA gestora (normal): Mercado misto e lateral no BTC, com força seletiva em alguns nomes e cautela antes dos eventos macro de amanhã. | escolhidas: LINK, PUMP, SOL
+2026-09-29 07:00:42 INFO    === Análise | MODO TESTE | capital 9999.76 USDC | posições: RUNE/USDC, XLM/USDC, AVAX/USDC | a analisar: RUNE, XLM, AVAX, LINK*, PUMP*, SOL* ===
+2026-09-29 07:00:57 INFO    RUNE/USDC @ 0.785 -> HOLD (conf 0.64, 1/1, 12s) => sem ação
+2026-09-29 07:00:57 INFO       motivo: Não há invalidação técnica: o preço recuperou do recuo, está acima da EMA20 1h e aproxima-se de +1R, mas ainda não justifica perseguir nem encerrar antes do alvo. Manter é aceitável porque o stop atual já reduz bastante o risco e deixa espaço para tentativa de continuação até 0,818. Não subo o stop porque a zona lógica imediata continua perto de 0,766 e apertar para baixo do último candle aumentaria o risco de ruído.
+2026-09-29 07:01:12 INFO    XLM/USDC @ 0.2249 -> HOLD (conf 0.62, 1/1, 12s) => sem ação
+2026-09-29 07:01:12 INFO       motivo: Com posição aberta e apenas ~0,18R de ganho, ainda não há margem para subir o stop para breakeven nem motivo técnico forte para vender. A tese do pullback continua válida enquanto os fechos se mantiverem acima da zona 0,2157/0,2153, apesar de exigir cautela pelo enfraquecimento intradiário. Mantém-se o plano original para alvo perto de 0,2401.
+2026-09-29 07:01:22 INFO    Notícias AVAX: neutral (-0.12) | 0 manchetes próprias
+2026-09-29 07:01:34 INFO    AVAX/USDC @ 10.63 -> HOLD (conf 0.62, 1/1, 12s) => sem ação
+2026-09-29 07:01:34 INFO       motivo: Como já há posição aberta e ainda não houve quebra estrutural nem fecho abaixo dos suportes relevantes, não há motivo para vender imediatamente. Também não faz sentido subir o stop já, porque o preço ainda está praticamente no ponto de entrada e não formou novo higher low fiável.
+2026-09-29 07:01:44 INFO    Notícias LINK: bullish (0.34) | 3 manchetes próprias
+2026-09-29 07:02:19 INFO    LINK/USDC: ordem pendente BUY_STOP a 15.03 (stop 14.615, alvo 15.768)
+2026-09-29 07:02:19 INFO    LINK/USDC @ 14.855 -> BUY_STOP (conf 0.59, 1/1, 35s) => ordem pendente: comprar se o preço subir até 15.03 (stop 14.615, alvo 15.768)
+2026-09-29 07:02:19 INFO       motivo: Não compro já porque a reação ainda não confirmou força e o trade anterior acabou de falhar perto desta zona. Prefiro BUY_STOP acima de 15.00 para entrar apenas se o preço recuperar a resistência/EMAs curtas, mantendo alvo no máximo recente e stop abaixo do fundo de pullback. O R/R líquido fica aceitável, mas a confiança é moderada pelo contexto de mercado e derivados.
+2026-09-29 07:02:29 INFO    Notícias PUMP: bearish (-0.48) | 1 manchetes próprias
+2026-09-29 07:02:52 INFO    PUMP/USDC: ordem pendente BUY_LIMIT a 0.004866 (stop 0.00462, alvo 0.00556)
+2026-09-29 07:02:52 INFO    PUMP/USDC @ 0.004914 -> BUY_LIMIT (conf 0.60, 1/1, 23s) => ordem pendente: comprar se o preço descer até 0.004866 (stop 0.00462, alvo 0.00556)
+2026-09-29 07:02:52 INFO       motivo: Não vale perseguir o preço após a recuperação de curto prazo no 15m, que já está perto de sobrecompra. Prefiro comprar apenas num recuo para 0.004866, junto da EMA50 1h/zona de reteste, mantendo stop abaixo do fundo recente e R:R superior a 1.5 após custos.
+2026-09-29 07:03:03 INFO    Notícias SOL: bullish (0.46) | 2 manchetes próprias
+2026-09-29 07:03:30 INFO    SOL/USDC @ 118.2 -> HOLD (conf 0.62, 1/1, 27s) => sem ação (ordem pendente mantida)
+2026-09-29 07:03:30 INFO       motivo: Não baixo o gatilho para 118,61 porque isso compraria ainda dentro do range e antes de recuperar a resistência/EMA50 de 1h. A ordem pendente existente em 119,75 continua mais selectiva: só entra se SOL confirmar força acima da zona 119,7, com alvo lógico na área 124,95–125,2 e R/R aceitável. Assim, mantenho a ordem pendente em vez de antecipar um rompimento com volume apenas mediano.
+2026-09-29 07:03:31 INFO    NEAR/USDC: ordem pendente removida (expirou)
+2026-09-29 07:09:38 INFO    TAO/USDC: ordem BUY_STOP disparada a 305.3 -> bloqueado: máximo de 3 posições abertas
+2026-09-29 07:11:20 INFO    ALGO/USDC: ordem BUY_LIMIT disparada a 0.1327 -> bloqueado: máximo de 3 posições abertas
+2026-09-29 07:12:02 INFO    Bot parado. As posições abertas mantêm-se, mas só são vigiadas com o bot a correr.
+2026-09-29 07:13:00 INFO    Aplicação iniciada em http://127.0.0.1:8765/
+2026-09-29 07:13:02 INFO    Notícias: 225 manchetes de 13/13 sites
+2026-09-29 07:13:17 INFO    VENDA RUNE/USDC (manual): @ 0.795602 | PnL +0.56 USDC (+4.01%, +1.17R)
+2026-09-29 07:13:17 INFO    VENDA XLM/USDC (manual): @ 0.225787 | PnL +0.11 USDC (+0.86%, +0.23R)
+2026-09-29 07:13:17 INFO    VENDA AVAX/USDC (manual): @ 10.7816 | PnL +0.13 USDC (+1.21%, +0.28R)
+2026-09-29 07:18:30 INFO    Aplicação iniciada em http://127.0.0.1:8765/
+2026-09-29 07:18:32 INFO    Notícias: 225 manchetes de 13/13 sites
