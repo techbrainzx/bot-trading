@@ -14,13 +14,6 @@ from .analysis import detect_setups, pct, trend_label
 
 log = logging.getLogger("bot")
 
-# Stablecoins, moedas embrulhadas e fiat que não interessam para trading
-EXCLUDED_BASES = {
-    "USDT", "USDC", "FDUSD", "TUSD", "DAI", "USDP", "USD1", "USDE", "USDS", "RLUSD", "BFUSD", "XUSD", "EURI",
-    "EUR", "GBP", "TRY", "BRL", "U", "PAXG", "XAUT", "WBTC", "WBETH", "BNSOL", "BETH", "USTC", "AEUR",
-}
-
-
 def _num(x, nd=2):
     try:
         x = float(x)
@@ -38,29 +31,15 @@ class Scanner:
 
     def min_volume(self) -> float:
         # os pares em EUR têm muito menos volume na Binance
-        return config.SCAN_MIN_VOLUME * (0.05 if config.QUOTE == "EUR" else 1)
+        return config.SCAN_MIN_VOLUME * (0.05 if config.QUOTE == "EUR" and config.MARKET == "crypto" else 1)
 
     def universe(self) -> list[str]:
-        """As moedas mais negociadas contra a moeda de cotação (cache de 30 min)."""
+        """As mais negociadas (cache de 30 min). Em ações, só as que têm a bolsa aberta agora."""
         ts, syms, key = self._universe if len(self._universe) == 3 else (0.0, [], None)
-        if syms and time.time() - ts < 1800 and key == (config.SCAN_UNIVERSE, config.QUOTE):
-            return syms
-        tickers = self.md.all_tickers()
-        rows = []
-        for sym, t in tickers.items():
-            m = self.md.ex.markets.get(sym)
-            if not m or not m.get("spot") or not m.get("active") or m.get("quote") != config.QUOTE:
-                continue
-            base = m["base"]
-            if base in EXCLUDED_BASES or base.endswith(("UP", "DOWN", "BULL", "BEAR")):
-                continue
-            vol = float(t.get("quoteVolume") or 0)
-            if vol >= self.min_volume():
-                rows.append((sym, vol))
-        rows.sort(key=lambda x: -x[1])
-        syms = [s for s, _ in rows[: config.SCAN_UNIVERSE]]
-        self._universe = (time.time(), syms, (config.SCAN_UNIVERSE, config.QUOTE))
-        return syms
+        if not (syms and time.time() - ts < 1800 and key == (config.SCAN_UNIVERSE, config.QUOTE, config.MARKET)):
+            syms = self.md.liquid_symbols(config.SCAN_UNIVERSE, self.min_volume())
+            self._universe = (time.time(), syms, (config.SCAN_UNIVERSE, config.QUOTE, config.MARKET))
+        return [s for s in syms if self.md.market_open(s)]
 
     def _analyze(self, sym, tickers, btc_ret, higher_tf):
         primary = self.md.ohlcv(sym, config.PRIMARY_TIMEFRAME, 250)
@@ -112,14 +91,16 @@ class Scanner:
 
     def scan(self) -> list[dict]:
         t0 = time.time()
+        higher_tf = config.CONTEXT_TIMEFRAMES[1]
+        self.md.prefetch(list(dict.fromkeys(self.md.liquid_symbols(config.SCAN_UNIVERSE, self.min_volume())
+                                            + [config.benchmark()])), [config.PRIMARY_TIMEFRAME, higher_tf])
         syms = self.universe()
         tickers = self.md.all_tickers()
-        higher_tf = config.CONTEXT_TIMEFRAMES[1]
         btc_trend_higher, btc_ret = None, None
         try:
-            btc = self.md.ohlcv(f"BTC/{config.QUOTE}", config.PRIMARY_TIMEFRAME, 60)
+            btc = self.md.ohlcv(config.benchmark(), config.PRIMARY_TIMEFRAME, 60)
             btc_ret = pct(btc["close"].iloc[-1], btc["close"].iloc[-21])
-            bh = self.md.ohlcv(f"BTC/{config.QUOTE}", higher_tf, 250)
+            bh = self.md.ohlcv(config.benchmark(), higher_tf, 250)
             bc = bh["close"]
             btc_trend_higher = trend_label(float(bc.iloc[-1]), ind.ema(bc, 20).iloc[-1], ind.ema(bc, 50).iloc[-1],
                                            ind.ema(bc, 200).iloc[-1])
@@ -136,15 +117,17 @@ class Scanner:
         results.sort(key=lambda x: -x["score"])
         regime = self.regime(results, btc_trend_higher)
         self.last = {"time": time.time(), "results": results, "universe": len(syms), "regime": regime}
-        log.info("Radar: %d moedas em %.0fs | mercado %s (%d%% a subir) | melhores: %s", len(results),
-                 time.time() - t0, regime["label"], regime["breadth_up_pct"],
+        log.info("Radar: %d ativos em %.0fs | mercado %s (%s%% a subir) | melhores: %s", len(results),
+                 time.time() - t0, (regime or {}).get("label", "sem dados"), (regime or {}).get("breadth_up_pct", "—"),
                  ", ".join(f"{r['symbol'].split('/')[0]} {r['score']}" for r in results[:5]) or "nenhuma")
         return results
 
     @staticmethod
     def regime(results: list, btc_trend: str | None) -> dict:
-        """Clima do mercado: percentagem de moedas em tendência de alta e tendência do BTC."""
-        n = len(results) or 1
+        """Clima do mercado: percentagem de moedas em tendência de alta e tendência do BTC/S&P 500."""
+        if not results:
+            return None
+        n = len(results)
         up = sum(1 for r in results if r["trend"] in ("up", "strong_up"))
         above = sum(1 for r in results if r["above_ema50_higher"])
         avg_24h = sum((r["change_24h_pct"] or 0) for r in results) / n
@@ -159,7 +142,7 @@ class Scanner:
         labels = {"risk_on": "favorável", "neutral": "misto", "risk_off": "desfavorável"}
         return {"state": state, "label": labels[state], "breadth_up_pct": breadth_up,
                 "breadth_above_ema50_pct": breadth_above, "avg_change_24h_pct": round(avg_24h, 2),
-                "btc_trend": btc_trend}
+                "benchmark": config.benchmark_label(), "benchmark_trend": btc_trend}
 
     def candidates(self, exclude: set, limit: int | None = None) -> list[str]:
         """As melhores oportunidades acima da pontuação mínima (fora das que já estão a ser vistas)."""

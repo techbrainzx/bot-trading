@@ -1,0 +1,23 @@
+{
+ "created": "2026-09-29T20:29:36+00:00",
+ "start_cash": 10000.0,
+ "cash": 10000.0,
+ "positions": {},
+ "pending": {},
+ "trades": [],
+ "equity_peak": 10000.0,
+ "day": "2026-09-29",
+ "day_start_equity": 10000.0,
+ "halted": false,
+ "halt_reason": null,
+ "cooldowns": {},
+ "decisions": {},
+ "last_decision_candle": 1790708400000,
+ "usage": {},
+ "equity_history": [
+  [
+   1790713776383,
+   10000.0
+  ]
+ ]
+}

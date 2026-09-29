@@ -36,6 +36,21 @@ FEEDS = {
     "BeInCrypto": "https://beincrypto.com/feed/",
 }
 
+STOCK_FEEDS = {
+    "CNBC": "https://search.cnbc.com/rs/search/combinedcms/view.xml?partnerId=wrss01&id=100003114",
+    "CNBC Markets": "https://search.cnbc.com/rs/search/combinedcms/view.xml?partnerId=wrss01&id=20910258",
+    "CNBC Tech": "https://search.cnbc.com/rs/search/combinedcms/view.xml?partnerId=wrss01&id=19854910",
+    "MarketWatch": "https://feeds.content.dowjones.io/public/rss/mw_topstories",
+    "WSJ Markets": "https://feeds.content.dowjones.io/public/rss/RSSMarketsMain",
+    "Financial Times": "https://www.ft.com/markets?format=rss",
+    "Seeking Alpha": "https://seekingalpha.com/market_currents.xml",
+    "Investing.com": "https://www.investing.com/rss/news_25.rss",
+    "Nasdaq": "https://www.nasdaq.com/feed/rssoutbound?category=Stocks",
+    "Yahoo Finance": "https://finance.yahoo.com/news/rssindex",
+    "Fortune": "https://fortune.com/feed/",
+}
+YAHOO_TICKER_RSS = "https://feeds.finance.yahoo.com/rss/2.0/headline?s={ticker}&region=US&lang=en-US"
+
 # Nomes por extenso (sem distinguir maiúsculas). O ticker (ex.: "SOL") é procurado só em maiúsculas.
 ASSET_NAMES = {
     "BTC": ["bitcoin"], "ETH": ["ethereum", "ether"], "SOL": ["solana"], "XRP": ["ripple", "xrp"],
@@ -69,10 +84,10 @@ NEWS_SCHEMA = {
 PROMPT = """Data/hora atual: {now} UTC.
 Objetivo: avaliar o impacto provável das notícias no preço de {asset} ({symbol}) nas próximas horas/dias.
 
-Manchetes recentes recolhidas de {n_sources} sites de cripto sobre {asset}:
+Manchetes recentes recolhidas de {n_sources} sites {kind} sobre {asset}:
 {asset_headlines}
 
-Manchetes gerais do mercado cripto:
+Manchetes gerais do mercado:
 {market_headlines}
 
 Eventos macroeconómicos de alto impacto (hora UTC):
@@ -80,7 +95,7 @@ Eventos macroeconómicos de alto impacto (hora UTC):
 
 Dados globais: {global_data}
 
-Usa pesquisa na web para confirmar e completar (últimas 48h): notícias específicas do ativo (hacks, listagens, desbloqueios de tokens, upgrades, parcerias, ETFs, ações de empresas/tesourarias, processos judiciais), macro (Fed, inflação, juros, dólar, bolsa americana) e regulação.
+Usa pesquisa na web para confirmar e completar (últimas 48h): {focus}, macro (Fed, inflação, juros, dólar, bolsa americana) e regulação.
 Privilegia fontes fiáveis e recentes, indica as datas e não inventes nada. Se não houver nada relevante, diz isso e usa data_quality = "none".
 sentiment_score = impacto provável no preço de {asset} (-1 muito negativo, 0 neutro, 1 muito positivo).
 Escreve em português de Portugal, de forma concisa (summary com no máximo 4 frases; no máximo 6 key_events)."""
@@ -103,9 +118,16 @@ def _parse_date(s: str | None) -> float | None:
         return None
 
 
-def _matcher(asset: str):
-    names = ASSET_NAMES.get(asset, [])
-    parts = [rf"(?<![A-Za-z]){re.escape(asset)}(?![A-Za-z])"]  # ticker em maiúsculas
+def _matcher(asset: str, stocks: bool = False):
+    if stocks:
+        from .stockdata import STOCK_NAMES
+        names = STOCK_NAMES.get(asset, [])
+        base = asset.split(".")[0]
+        # em ações só aceita o ticker em formatos inequívocos: (AAPL), $AAPL, NASDAQ:AAPL
+        parts = [rf"\({re.escape(base)}\)", rf"\${re.escape(base)}\b", rf":\s?{re.escape(base)}\b"]
+    else:
+        names = ASSET_NAMES.get(asset, [])
+        parts = [rf"(?<![A-Za-z]){re.escape(asset)}(?![A-Za-z])"]  # ticker em maiúsculas
     rx_ticker = re.compile("|".join(parts))
     rx_names = re.compile("|".join(rf"\b{re.escape(n)}\b" for n in names), re.I) if names else None
 
@@ -115,7 +137,11 @@ def _matcher(asset: str):
 
 
 class NewsHub:
-    def __init__(self, client=None, model: str = "gpt-5.4-mini", refresh_minutes: int = 60, on_usage=None):
+    def __init__(self, client=None, model: str = "gpt-5.4-mini", refresh_minutes: int = 60, on_usage=None,
+                 market: str = "crypto"):
+        self.market = market
+        self.feeds = STOCK_FEEDS if market == "stocks" else FEEDS
+        self._ticker_news: dict[str, tuple[float, list]] = {}
         self.client = client
         self.model = model
         self.ttl = refresh_minutes * 60
@@ -156,7 +182,7 @@ class NewsHub:
         if not force and time.time() - self._feeds_ts < 600:
             return
         with ThreadPoolExecutor(max_workers=8) as pool:
-            results = list(pool.map(self._fetch_feed, FEEDS.items()))
+            results = list(pool.map(self._fetch_feed, self.feeds.items()))
         cutoff = time.time() - 48 * 3600
         seen, items = set(), []
         for name, rows, status in results:
@@ -171,7 +197,7 @@ class NewsHub:
             self._items = items
             self._feeds_ts = time.time()
         ok = sum(1 for s in self.feed_status.values() if s.startswith("ok"))
-        log.info("Notícias: %d manchetes de %d/%d sites", len(items), ok, len(FEEDS))
+        log.info("Notícias: %d manchetes de %d/%d sites", len(items), ok, len(self.feeds))
 
     def headlines(self, asset: str | None = None, hours: float = 24, limit: int = 10) -> list[dict]:
         try:
@@ -179,20 +205,34 @@ class NewsHub:
         except Exception as e:
             log.warning("Falha a atualizar notícias RSS: %s", e)
         now = time.time()
-        match = _matcher(asset) if asset else None
+        stocks = self.market == "stocks"
+        match = _matcher(asset, stocks) if asset else None
         out = []
         with self.lock:
             items = list(self._items)
+        if asset and stocks:
+            items = sorted(items + self.ticker_news(asset), key=lambda x: -x["ts"])
         for it in items:
             if now - it["ts"] > hours * 3600:
                 continue
-            if match and not match(it["title"] + " " + it["summary"]):
+            if match and not it.get("matched") and not match(it["title"] + " " + it["summary"]):
                 continue
             out.append({"age_h": round((now - it["ts"]) / 3600, 1), "source": it["source"], "title": it["title"],
                         "link": it["link"], "ts": it["ts"]})
             if len(out) >= limit:
                 break
         return out
+
+    def ticker_news(self, symbol: str) -> list:
+        """Notícias próprias de uma ação no Yahoo Finance (cache de 15 min)."""
+        hit = self._ticker_news.get(symbol)
+        if hit and time.time() - hit[0] < 900:
+            return hit[1]
+        _, rows, _ = self._fetch_feed((f"Yahoo {symbol.split('.')[0]}", YAHOO_TICKER_RSS.format(ticker=symbol)))
+        for r in rows:
+            r["matched"] = True
+        self._ticker_news[symbol] = (time.time(), rows)
+        return rows
 
     # ---------------------------------------------------------------- macro
     def calendar(self) -> list[dict]:
@@ -253,10 +293,18 @@ class NewsHub:
     def ai_digest(self, symbol: str, asset_headlines: list, macro: dict) -> dict | None:
         if not self.client:
             return None
-        asset = symbol.split("/")[0]
+        asset = symbol if self.market == "stocks" else symbol.split("/")[0]
         hit = self._ai.get(asset)
         if hit and time.time() - hit[0] < self.ttl:
             return hit[1]
+        if self.market == "stocks":
+            kind = "financeiros"
+            focus = ("notícias da empresa/ETF (resultados, previsões, analistas, produtos, processos, fusões, "
+                     "fluxos, notícias do setor)")
+        else:
+            kind = "de cripto"
+            focus = ("notícias específicas do ativo (hacks, listagens, desbloqueios de tokens, upgrades, parcerias, "
+                     "ETFs, ações de empresas/tesourarias, processos judiciais)")
         fmt = lambda hs: "\n".join(f"- [{h['age_h']}h] {h['source']}: {h['title']}" for h in hs) or "- (nenhuma)"
         cal = "\n".join(f"- {e['time_utc']} {e['country']} {e['event']} (prev. {e['forecast']}, ant. {e['previous']})"
                         for e in macro.get("high_impact_events", [])) or "- (nenhum nas próximas 48h)"
@@ -264,7 +312,7 @@ class NewsHub:
             now = datetime.now(timezone.utc).strftime("%Y-%m-%d %H:%M")
             resp = self.client.responses.create(
                 model=self.model,
-                input=PROMPT.format(now=now, asset=asset, symbol=symbol, n_sources=len(FEEDS),
+                input=PROMPT.format(now=now, asset=asset, symbol=symbol, n_sources=len(self.feeds), kind=kind, focus=focus,
                                     asset_headlines=fmt(asset_headlines), market_headlines=fmt(macro.get("market_headlines", [])),
                                     calendar=cal, global_data=json.dumps(macro.get("global_market"), ensure_ascii=False)),
                 tools=[{"type": "web_search"}],
@@ -283,7 +331,7 @@ class NewsHub:
             return hit[1] if hit else None
 
     def for_symbol(self, symbol: str, macro: dict, use_ai: bool = True) -> dict:
-        asset = symbol.split("/")[0]
+        asset = symbol if self.market == "stocks" else symbol.split("/")[0]
         hs = self.headlines(asset, hours=36, limit=8)
         return {
             "ai_summary": self.ai_digest(symbol, hs, macro) if use_ai else None,

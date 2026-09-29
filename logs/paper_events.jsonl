@@ -11,3 +11,7 @@
 {"time": "2026-09-29T05:54:27+00:00", "event": "PENDING_TRIGGERED", "symbol": "AERO/USDC", "type": "BUY_STOP", "trigger": 0.834223, "outcome": "bloqueado: máximo de 3 posições abertas"}
 {"time": "2026-09-29T06:09:38+00:00", "event": "PENDING_TRIGGERED", "symbol": "TAO/USDC", "type": "BUY_STOP", "trigger": 305.25, "outcome": "bloqueado: máximo de 3 posições abertas"}
 {"time": "2026-09-29T06:11:20+00:00", "event": "PENDING_TRIGGERED", "symbol": "ALGO/USDC", "type": "BUY_LIMIT", "trigger": 0.132851, "outcome": "bloqueado: máximo de 3 posições abertas"}
+{"time": "2026-09-29T21:04:22+00:00", "event": "BUY", "symbol": "NEAR/USDC", "qty": 223.42674060602218, "price": 4.9314645, "cost": 1102.9228606889562, "stop": 4.72, "take_profit": 5.43}
+{"time": "2026-09-29T21:04:22+00:00", "event": "PENDING_TRIGGERED", "symbol": "NEAR/USDC", "type": "BUY_LIMIT", "trigger": 4.929, "outcome": "COMPRADO 223.427 @ 4.93146 (stop 4.72, TP 5.43)"}
+{"time": "2026-09-29T21:25:03+00:00", "event": "BUY", "symbol": "LINK/USDC", "qty": 140.60900572559868, "price": 14.639315999999999, "cost": 2060.478086930111, "stop": 14.3203, "take_profit": 15.768}
+{"time": "2026-09-29T21:25:03+00:00", "event": "PENDING_TRIGGERED", "symbol": "LINK/USDC", "type": "BUY_LIMIT", "trigger": 14.632, "outcome": "COMPRADO 140.609 @ 14.6393 (stop 14.3203, TP 15.768)"}

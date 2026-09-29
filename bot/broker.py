@@ -32,25 +32,30 @@ class PositionGone(Exception):
 class PaperBroker:
     name = "paper"
 
-    def __init__(self, fee_pct: float = config.FEE_PCT, slippage_pct: float = config.SLIPPAGE_PCT):
-        self.fee = fee_pct / 100
-        self.slip = slippage_pct / 100
+    def __init__(self, fee_pct: float | None = None, slippage_pct: float | None = None, fx=None, min_order: float = 5.0):
+        fee = config.FEE_PCT if fee_pct is None else fee_pct
+        self.fee_for = fee if callable(fee) else (lambda symbol, f=fee: f)  # % por símbolo
+        self.slip = (config.SLIPPAGE_PCT if slippage_pct is None else slippage_pct) / 100
+        self.fx = fx or (lambda symbol: 1.0)   # moeda do instrumento -> moeda da conta
+        self.min_order = min_order
 
     def available_quote(self):
         return None  # o saldo é o do estado interno
 
     def min_order_value(self, symbol: str) -> float:
-        return 5.0  # mínimo típico da Binance spot
+        return self.min_order
 
     def buy(self, symbol: str, qty: float, price: float) -> Fill:
         px = price * (1 + self.slip)
-        fee = qty * px * self.fee
-        return Fill(qty, px, -(qty * px + fee), fee, f"paper-{uuid.uuid4().hex[:10]}")
+        value = qty * px * self.fx(symbol)
+        fee = value * self.fee_for(symbol) / 100
+        return Fill(qty, px, -(value + fee), fee, f"paper-{uuid.uuid4().hex[:10]}")
 
     def sell(self, symbol: str, qty: float, price: float) -> Fill:
         px = price * (1 - self.slip)
-        fee = qty * px * self.fee
-        return Fill(qty, px, qty * px - fee, fee, f"paper-{uuid.uuid4().hex[:10]}")
+        value = qty * px * self.fx(symbol)
+        fee = value * self.fee_for(symbol) / 100
+        return Fill(qty, px, value - fee, fee, f"paper-{uuid.uuid4().hex[:10]}")
 
 
 def make_exchange(exchange_id: str, api_key: str, secret: str, sandbox: bool):

@@ -37,12 +37,12 @@ SELECT_SCHEMA = {
     "additionalProperties": False,
 }
 
-PROMPT = """You are the portfolio manager of an automated LONG-ONLY spot crypto bot trading in {quote} on the {tf} timeframe.
+PROMPT = """You are the portfolio manager of an automated LONG-ONLY {market} bot (account in {quote}) on the {tf} timeframe.
 A quantitative radar already scanned the most liquid coins. Below are the best candidates with their metrics, detected setup and recent headlines, plus the market regime, the bot's track record and its open positions.
 
 Choose up to {n} symbols that deserve a deep analysis RIGHT NOW for a possible long entry (a second AI will decide the exact entry, stop and target). Rank them best first.
 Prefer: a clear setup with good reward/risk, strength versus BTC, a supportive higher-timeframe trend, healthy volatility (enough movement to beat ~0.3% round-trip costs), and neutral or positive news.
-Avoid: hostile or scandal news (hacks, delistings, lawsuits, unlocks), exhausted moves (RSI > 75 after a big pump), coins whose setup type keeps losing in the track record, and several highly correlated coins with the same setup unless the market is clearly risk-on.
+Avoid: hostile or scandal news (hacks, delistings, lawsuits, unlocks, profit warnings), earnings within 2 days, exhausted moves (RSI > 75 after a big pump), coins whose setup type keeps losing in the track record, and several highly correlated coins with the same setup unless the market is clearly risk-on.
 If the market regime is risk_off, be selective (fewer picks, prefer relative strength and oversold reversals with confirmation). If nothing is worth it, return an empty picks list.
 market_stance: aggressive (broad risk-on), normal, or defensive (risk-off / event risk).
 Write market_view and every reason in European Portuguese, one short sentence each.
@@ -82,7 +82,8 @@ class AISelector:
         }
         resp = self.client.responses.create(
             model=self.model,
-            input=PROMPT.format(quote=config.QUOTE, tf=config.PRIMARY_TIMEFRAME, n=n,
+            input=PROMPT.format(quote=config.account_currency(), tf=config.PRIMARY_TIMEFRAME, n=n,
+                                market="stock and UCITS ETF" if config.MARKET == "stocks" else "spot crypto",
                                 data=json.dumps(data, ensure_ascii=False, default=str)),
             text={"format": {"type": "json_schema", "name": "selection", "schema": SELECT_SCHEMA, "strict": True}},
         )

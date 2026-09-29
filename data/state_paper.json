@@ -1,7 +1,7 @@
 {
  "created": "2026-09-28T18:10:51+00:00",
  "start_cash": 10000.0,
- "cash": 10000.129377372503,
+ "cash": 10024.910053037804,
  "positions": {},
  "trades": [
   {
@@ -73,9 +73,43 @@
    "r_multiple": 0.28,
    "reason": "manual",
    "setup": "breakout_stop"
+  },
+  {
+   "trade_id": "2f14c97aa7d6",
+   "symbol": "NEAR/USDC",
+   "opened_at": "2026-09-29T21:04:22+00:00",
+   "closed_at": "2026-09-29T23:14:15+00:00",
+   "hours": 2.2,
+   "entry_price": 4.9314645,
+   "exit_price": 4.999499,
+   "qty": 223.42674060602218,
+   "pnl": 12.9819,
+   "pnl_pct": 1.177,
+   "r_multiple": 0.27,
+   "risk_part": 48.348645,
+   "reason": "manual",
+   "setup": "breakout_stop",
+   "partial": false
+  },
+  {
+   "trade_id": "7222bb8d1d3c",
+   "symbol": "LINK/USDC",
+   "opened_at": "2026-09-29T21:25:03+00:00",
+   "closed_at": "2026-09-29T23:14:15+00:00",
+   "hours": 1.8,
+   "entry_price": 14.639315999999999,
+   "exit_price": 14.75262,
+   "qty": 140.60900572559868,
+   "pnl": 11.7988,
+   "pnl_pct": 0.573,
+   "r_multiple": 0.25,
+   "risk_part": 46.914942,
+   "reason": "manual",
+   "setup": "trend_pullback",
+   "partial": false
   }
  ],
- "equity_peak": 10000.139252949151,
+ "equity_peak": 10035.092917355949,
  "day": "2026-09-29",
  "day_start_equity": 10000.0,
  "halted": false,
@@ -470,20 +504,6 @@
   ],
   "LINK/USDC": [
    {
-    "time": "2026-09-28T23:24:52+00:00",
-    "price": 15.379,
-    "action": "BUY_STOP",
-    "confidence": 0.6,
-    "reasoning": "Não compro a mercado porque está perto da resistência e já afastado da EMA20; a melhor assimetria é exigir confirmação acima do máximo de 20 períodos. O BUY_STOP aproveita continuação se o catalisador mantiver pressão compradora, com stop abaixo da zona de invalidação intradiária e alvo ajustado para manter R/R líquido aceitável.",
-    "outcome": "ordem pendente: comprar se o preço subir até 15.5364 (stop 14.8701, alvo 16.75)",
-    "regime": "trending_up",
-    "news": "bullish",
-    "setup": "Compra no recuo (pendente)",
-    "entry_price": 15.5364,
-    "stop_loss": 14.8701,
-    "take_profit": 16.75
-   },
-   {
     "time": "2026-09-28T23:50:53+00:00",
     "price": 15.448,
     "action": "HOLD",
@@ -566,6 +586,62 @@
     "entry_price": 15.03,
     "stop_loss": 14.615,
     "take_profit": 15.768
+   },
+   {
+    "time": "2026-09-29T20:30:22+00:00",
+    "price": 14.695,
+    "action": "BUY_LIMIT",
+    "confidence": 0.6,
+    "reasoning": "Prefiro não comprar a mercado porque a recuperação ainda tem pouco volume e o timeframe de 15m continua em tendência descendente. Coloco BUY_LIMIT no reteste do suporte 14,632, com stop abaixo da zona de invalidação e alvo no máximo de 20 barras, mantendo R/R confortável. O setup é válido enquanto o pullback respeitar a estrutura de alta superior.",
+    "outcome": "ordem pendente: comprar se o preço descer até 14.632 (stop 14.3203, alvo 15.768)",
+    "regime": "trending_up",
+    "news": "bullish",
+    "setup": "Pullback em tendência",
+    "entry_price": 14.632,
+    "stop_loss": 14.3203,
+    "take_profit": 15.768
+   },
+   {
+    "time": "2026-09-29T21:00:20+00:00",
+    "price": 14.697,
+    "action": "HOLD",
+    "confidence": 0.6,
+    "reasoning": "Mantenho a BUY_LIMIT existente em 14.632 em vez de comprar já, porque a zona de suporte oferece melhor assimetria e confirma o plano de pullback sem perseguir uma recuperação ainda fraca. O stop abaixo de 14.32 protege uma quebra do suporte recente e o alvo em 15.768 dá R/R confortável. Se o preço recuperar sem reteste, prefiro perder a entrada a comprar num bounce de baixo volume.",
+    "outcome": "sem ação (ordem pendente mantida)",
+    "regime": "trending_up",
+    "news": "bullish",
+    "setup": "Pullback em tendência",
+    "entry_price": null,
+    "stop_loss": null,
+    "take_profit": null
+   },
+   {
+    "time": "2026-09-29T22:00:20+00:00",
+    "price": 14.7,
+    "action": "HOLD",
+    "confidence": 0.62,
+    "reasoning": "A posição acabou de entrar no pullback planeado e ainda não houve quebra estrutural nem pressão vendedora com volume que invalide a tese. Como o trade está só a +0,19R, ainda é cedo para subir o stop; manter o stop original abaixo da zona de suporte faz sentido. O alvo em 15,768 continua realista se o preço recuperar 15,00–15,48.",
+    "outcome": "sem ação",
+    "regime": "ranging",
+    "news": "bullish",
+    "setup": null,
+    "entry_price": null,
+    "stop_loss": null,
+    "take_profit": null
+   },
+   {
+    "time": "2026-09-29T23:00:20+00:00",
+    "price": 14.674,
+    "action": "HOLD",
+    "confidence": 0.6,
+    "reasoning": "Mantenho a posição porque a entrada de pullback ainda não foi invalidada e não houve fecho claro abaixo do suporte nem venda forte com volume. O trade está quase no ponto de entrada, por isso ainda é cedo para subir o stop; o stop original abaixo da estrutura continua adequado. A janela macro de amanhã recomenda vigilância, mas não obriga a sair agora.",
+    "outcome": "sem ação",
+    "regime": "ranging",
+    "news": "bullish",
+    "setup": null,
+    "entry_price": null,
+    "stop_loss": null,
+    "take_profit": null
    }
   ],
   "HBAR/USDC": [
@@ -696,6 +772,20 @@
     "entry_price": null,
     "stop_loss": null,
     "take_profit": null
+   },
+   {
+    "time": "2026-09-29T21:00:20+00:00",
+    "price": 0.764,
+    "action": "BUY",
+    "confidence": 0.59,
+    "reasoning": "Aceito o setup de pullback em tendência: a entrada está perto da EMA20 1h, o stop fica abaixo do fundo recente/suporte 0,739 e o alvo tem R/R suficiente após custos. A posição deve ser menor/disciplinada pelo risco noticioso e pela falta de volume, mas a estrutura ainda favorece continuação enquanto 0,736–0,739 não for perdido.",
+    "outcome": "rejeitado pelo gestor de risco: spread de 0.262% demasiado largo",
+    "regime": "trending_up",
+    "news": "bearish",
+    "setup": "Pullback em tendência",
+    "entry_price": null,
+    "stop_loss": 0.736876,
+    "take_profit": 0.824248
    }
   ],
   "ALGO/USDC": [
@@ -812,6 +902,48 @@
     "entry_price": 4.845,
     "stop_loss": 4.58,
     "take_profit": 5.365
+   },
+   {
+    "time": "2026-09-29T20:30:22+00:00",
+    "price": 4.97,
+    "action": "BUY_LIMIT",
+    "confidence": 0.59,
+    "reasoning": "Prefiro não perseguir o rompimento imediato em 5,00 porque há resistência próxima em 5,05–5,17 e o último breakout falhou. Coloco BUY_LIMIT no suporte/EMA em 4,929, com stop abaixo da estrutura curta e alvo antes da resistência superior, mantendo R:R confortável após custos.",
+    "outcome": "ordem pendente: comprar se o preço descer até 4.929 (stop 4.72, alvo 5.43)",
+    "regime": "trending_up",
+    "news": "bullish",
+    "setup": "Compra no rompimento (pendente)",
+    "entry_price": 4.929,
+    "stop_loss": 4.72,
+    "take_profit": 5.43
+   },
+   {
+    "time": "2026-09-29T22:00:20+00:00",
+    "price": 4.958,
+    "action": "HOLD",
+    "confidence": 0.62,
+    "reasoning": "A posição foi aberta num pullback aceitável e ainda está muito recente, com lucro pequeno e sem quebra estrutural. Não faz sentido vender antes de o preço testar a continuação, mas também não há progresso suficiente para subir o stop sem aumentar o risco de ser sacudido.",
+    "outcome": "sem ação",
+    "regime": "trending_up",
+    "news": "bullish",
+    "setup": "Compra no rompimento (pendente)",
+    "entry_price": null,
+    "stop_loss": null,
+    "take_profit": null
+   },
+   {
+    "time": "2026-09-29T23:00:20+00:00",
+    "price": 4.975,
+    "action": "HOLD",
+    "confidence": 0.63,
+    "reasoning": "A posição é recente, está ligeiramente positiva e a tese de pullback para continuação ainda está válida. Não há progresso suficiente para subir o stop sem aumentar o risco de ruído, mas também não há sinal forte de invalidação para vender.",
+    "outcome": "sem ação",
+    "regime": "trending_up",
+    "news": "bullish",
+    "setup": null,
+    "entry_price": null,
+    "stop_loss": null,
+    "take_profit": null
    }
   ],
   "XLM/USDC": [
@@ -944,6 +1076,48 @@
     "entry_price": null,
     "stop_loss": null,
     "take_profit": null
+   },
+   {
+    "time": "2026-09-29T20:30:22+00:00",
+    "price": 11.409,
+    "action": "BUY_LIMIT",
+    "confidence": 0.62,
+    "reasoning": "Não compro a mercado porque o rácio risco/recompensa até 12.0/12.25 fica apertado após custos e o preço está acima da zona ideal de pullback. Prefiro BUY_LIMIT junto da EMA20 1h/suporte intradiário, onde o stop pode ficar abaixo de 10.811 e o alvo no reteste da zona 12.0 dá melhor assimetria.",
+    "outcome": "ordem pendente: comprar se o preço descer até 11.18 (stop 10.78, alvo 12)",
+    "regime": "trending_up",
+    "news": "bullish",
+    "setup": "Pullback em tendência",
+    "entry_price": 11.18,
+    "stop_loss": 10.78,
+    "take_profit": 12.0
+   },
+   {
+    "time": "2026-09-29T21:00:20+00:00",
+    "price": 11.461,
+    "action": "BUY_LIMIT",
+    "confidence": 0.62,
+    "reasoning": "Não compro a mercado porque o preço está acima da zona ideal e o alvo imediato em 12.0 limita o RR. Prefiro ajustar/manter uma BUY_LIMIT junto da EMA20 1h, com stop abaixo do suporte 10.811 e alvo no reteste/rompimento da zona 12.0-12.2.",
+    "outcome": "ordem pendente: comprar se o preço descer até 11.216 (stop 10.78, alvo 12.2)",
+    "regime": "trending_up",
+    "news": "bullish",
+    "setup": "Compra no recuo (pendente)",
+    "entry_price": 11.216,
+    "stop_loss": 10.78,
+    "take_profit": 12.2
+   },
+   {
+    "time": "2026-09-29T22:00:20+00:00",
+    "price": 11.426,
+    "action": "BUY_LIMIT",
+    "confidence": 0.62,
+    "reasoning": "Não compro a mercado porque o preço está acima da zona ideal e perto de resistência, mas o setup de pullback continua válido. Ajusto/mantenho uma BUY_LIMIT perto da EMA20 1h, com stop abaixo do suporte 10.811 e alvo no reteste/extensão da zona 12.0-12.24.",
+    "outcome": "ordem pendente: comprar se o preço descer até 11.239 (stop 10.78, alvo 12.239)",
+    "regime": "trending_up",
+    "news": "bullish",
+    "setup": "Compra no recuo (pendente)",
+    "entry_price": 11.239,
+    "stop_loss": 10.78,
+    "take_profit": 12.239
    }
   ],
   "AERO/USDC": [
@@ -990,10 +1164,86 @@
     "entry_price": 0.004866,
     "stop_loss": 0.00462,
     "take_profit": 0.00556
+   },
+   {
+    "time": "2026-09-29T23:00:20+00:00",
+    "price": 0.005873,
+    "action": "BUY_LIMIT",
+    "confidence": 0.6,
+    "reasoning": "Prefiro usar a configuração quantitativa de pullback, que tem bom histórico recente, em vez de comprar a mercado perto dos máximos. A entrada em 0.005558 fica junto da EMA20 1h e suporte intradiário, com stop a cerca de 1.6 ATR e R:R perto de 2 antes de custos.",
+    "outcome": "ordem pendente: comprar se o preço descer até 0.005558 (stop 0.00522474, alvo 0.00622451)",
+    "regime": "trending_up",
+    "news": "bearish",
+    "setup": "Compra no recuo (pendente)",
+    "entry_price": 0.005558,
+    "stop_loss": 0.00522474,
+    "take_profit": 0.00622451
+   }
+  ],
+  "AAVE/USDC": [
+   {
+    "time": "2026-09-29T22:00:20+00:00",
+    "price": 166.64,
+    "action": "BUY_LIMIT",
+    "confidence": 0.61,
+    "reasoning": "Prefiro seguir o setup quantitativo de pullback em vez de comprar a mercado, porque o preço está abaixo do máximo recente mas ainda acima do ponto ideal de suporte. A entrada em 164,27 fica perto da EMA20 1h e do suporte intradiário, com stop abaixo da EMA50 1h e alvo realista acima da resistência, mantendo R/R superior ao mínimo.",
+    "outcome": "ordem pendente: comprar se o preço descer até 164.272 (stop 158.445, alvo 179.516)",
+    "regime": "trending_up",
+    "news": "bullish",
+    "setup": "Compra no recuo (pendente)",
+    "entry_price": 164.272,
+    "stop_loss": 158.445,
+    "take_profit": 179.516
+   }
+  ],
+  "ICP/USDC": [
+   {
+    "time": "2026-09-29T22:00:20+00:00",
+    "price": 3.446,
+    "action": "BUY_LIMIT",
+    "confidence": 0.61,
+    "reasoning": "Prefiro a compra no recuo em vez de perseguir o preço ou comprar o breakout, porque a tendência continua válida mas o momentum imediato perdeu força. A entrada em 3,3435 fica perto da EMA20/suporte, o stop está a cerca de 1,5 ATR e o alvo acima do máximo recente mantém RR suficiente após custos.",
+    "outcome": "ordem pendente: comprar se o preço descer até 3.34351 (stop 3.21987, alvo 3.63243)",
+    "regime": "trending_up",
+    "news": "bullish",
+    "setup": "Compra no recuo (pendente)",
+    "entry_price": 3.34351,
+    "stop_loss": 3.21987,
+    "take_profit": 3.63243
+   },
+   {
+    "time": "2026-09-29T23:00:20+00:00",
+    "price": 3.432,
+    "action": "HOLD",
+    "confidence": 0.62,
+    "reasoning": "Não faz sentido perseguir o preço atual, que ainda está acima da EMA20 de 1h e longe do VWAP, mas a tese de compra no recuo continua válida. Mantenho a ordem pendente existente perto da EMA20/suporte, com RR aceitável e sem evento macro de alto impacto nas próximas 2 horas.",
+    "outcome": "sem ação (ordem pendente mantida)",
+    "regime": "trending_up",
+    "news": "bullish",
+    "setup": "Compra no recuo (pendente)",
+    "entry_price": null,
+    "stop_loss": null,
+    "take_profit": null
+   }
+  ],
+  "ZRO/USDC": [
+   {
+    "time": "2026-09-29T23:00:20+00:00",
+    "price": 1.67,
+    "action": "BUY_LIMIT",
+    "confidence": 0.6,
+    "reasoning": "Não quero perseguir o preço directamente junto à resistência depois de +9% em 5 velas, mas a tendência de curto prazo ainda favorece comprar recuos. A zona 1.60 coincide com EMA20 1h/suporte recente e oferece melhor assimetria do que entrada a mercado. O setup de pullback também tem melhor histórico recente no bot e mantém R/R adequado após custos.",
+    "outcome": "ordem pendente: comprar se o preço descer até 1.60077 (stop 1.52322, alvo 1.7787)",
+    "regime": "trending_up",
+    "news": "bearish",
+    "setup": "Momentum forte",
+    "entry_price": 1.60077,
+    "stop_loss": 1.52322,
+    "take_profit": 1.7787
    }
   ]
  },
- "last_decision_candle": 1790658000000,
+ "last_decision_candle": 1790719200000,
  "usage": {
   "2026-09-28": {
    "gpt-5.4-mini": {
@@ -1009,14 +1259,14 @@
   },
   "2026-09-29": {
    "gpt-5.4-mini": {
-    "calls": 33,
-    "input": 287042,
-    "output": 23630
+    "calls": 48,
+    "input": 418359,
+    "output": 33253
    },
    "gpt-5.5": {
-    "calls": 35,
-    "input": 241556,
-    "output": 46094
+    "calls": 51,
+    "input": 353937,
+    "output": 62780
    }
   }
  },
@@ -1428,112 +1678,274 @@
   [
    1790662260491,
    10000.1
+  ],
+  [
+   1790713822118,
+   10000.13
+  ],
+  [
+   1790713844332,
+   10000.13
+  ],
+  [
+   1790714152525,
+   10000.13
+  ],
+  [
+   1790714457376,
+   10000.13
+  ],
+  [
+   1790714762396,
+   10000.13
+  ],
+  [
+   1790715067389,
+   10000.13
+  ],
+  [
+   1790715372260,
+   10000.13
+  ],
+  [
+   1790715643056,
+   10000.13
+  ],
+  [
+   1790715943575,
+   10000.93
+  ],
+  [
+   1790716248843,
+   10004.06
+  ],
+  [
+   1790716554020,
+   10002.72
+  ],
+  [
+   1790716859247,
+   9997.81
+  ],
+  [
+   1790717164503,
+   9993.49
+  ],
+  [
+   1790717469712,
+   9994.29
+  ],
+  [
+   1790717774841,
+   9997.35
+  ],
+  [
+   1790718080255,
+   10002.81
+  ],
+  [
+   1790718385562,
+   9993.36
+  ],
+  [
+   1790718690626,
+   10005.57
+  ],
+  [
+   1790718996006,
+   10008.49
+  ],
+  [
+   1790719243675,
+   10011.43
+  ],
+  [
+   1790719562779,
+   10012.78
+  ],
+  [
+   1790719868126,
+   10010.93
+  ],
+  [
+   1790720173351,
+   10010.74
+  ],
+  [
+   1790720478515,
+   10007.34
+  ],
+  [
+   1790720783749,
+   10016.37
+  ],
+  [
+   1790721089228,
+   10003.42
+  ],
+  [
+   1790721394539,
+   10010.98
+  ],
+  [
+   1790721699677,
+   10015.26
+  ],
+  [
+   1790722004876,
+   10016.7
+  ],
+  [
+   1790722309944,
+   10019.53
+  ],
+  [
+   1790722615050,
+   10020.39
+  ],
+  [
+   1790722844718,
+   10011.57
+  ],
+  [
+   1790723163218,
+   10026.3
+  ],
+  [
+   1790723468343,
+   10029.14
   ]
  ],
  "pending": {
-  "SOL/USDC": {
-   "symbol": "SOL/USDC",
-   "type": "BUY_STOP",
-   "trigger": 119.75,
-   "stop": 117.1,
-   "take_profit": 125.2,
-   "confidence": 0.59,
-   "reasoning": "Não compro a mercado porque ainda não há reversão confirmada e o preço está abaixo das EMAs 20/50 de 1h. Prefiro renovar o gatilho de rompimento acima de 119,75, onde o preço recupera resistência e momentum; o alvo é o reteste da zona 124,95–125,20 e o stop fica abaixo do suporte/reclaim falhado.",
-   "created": "2026-09-29T03:00:20+00:00",
-   "expires": "2026-09-29T07:00:20+00:00",
-   "atr": 1.292194518950579,
-   "setup": "breakout_stop"
+  "AVAX/USDC": {
+   "symbol": "AVAX/USDC",
+   "type": "BUY_LIMIT",
+   "trigger": 11.239,
+   "stop": 10.78,
+   "take_profit": 12.239,
+   "confidence": 0.62,
+   "reasoning": "Não compro a mercado porque o preço está acima da zona ideal e perto de resistência, mas o setup de pullback continua válido. Ajusto/mantenho uma BUY_LIMIT perto da EMA20 1h, com stop abaixo do suporte 10.811 e alvo no reteste/extensão da zona 12.0-12.24.",
+   "created": "2026-09-29T22:00:20+00:00",
+   "expires": "2026-09-30T02:00:20+00:00",
+   "atr": 0.23851746558211423,
+   "setup": "pullback_limit"
   },
-  "LINK/USDC": {
-   "symbol": "LINK/USDC",
-   "type": "BUY_STOP",
-   "trigger": 15.03,
-   "stop": 14.615,
-   "take_profit": 15.768,
-   "confidence": 0.59,
-   "reasoning": "Não compro já porque a reação ainda não confirmou força e o trade anterior acabou de falhar perto desta zona. Prefiro BUY_STOP acima de 15.00 para entrar apenas se o preço recuperar a resistência/EMAs curtas, mantendo alvo no máximo recente e stop abaixo do fundo de pullback. O R/R líquido fica aceitável, mas a confiança é moderada pelo contexto de mercado e derivados.",
-   "created": "2026-09-29T06:00:20+00:00",
-   "expires": "2026-09-29T10:00:20+00:00",
-   "atr": 0.3181925753601326,
-   "setup": "trend_pullback"
+  "AAVE/USDC": {
+   "symbol": "AAVE/USDC",
+   "type": "BUY_LIMIT",
+   "trigger": 164.272,
+   "stop": 158.445,
+   "take_profit": 179.516,
+   "confidence": 0.61,
+   "reasoning": "Prefiro seguir o setup quantitativo de pullback em vez de comprar a mercado, porque o preço está abaixo do máximo recente mas ainda acima do ponto ideal de suporte. A entrada em 164,27 fica perto da EMA20 1h e do suporte intradiário, com stop abaixo da EMA50 1h e alvo realista acima da resistência, mantendo R/R superior ao mínimo.",
+   "created": "2026-09-29T22:00:20+00:00",
+   "expires": "2026-09-30T02:00:20+00:00",
+   "atr": 3.3155242229423645,
+   "setup": "pullback_limit"
+  },
+  "ICP/USDC": {
+   "symbol": "ICP/USDC",
+   "type": "BUY_LIMIT",
+   "trigger": 3.34351,
+   "stop": 3.21987,
+   "take_profit": 3.63243,
+   "confidence": 0.61,
+   "reasoning": "Prefiro a compra no recuo em vez de perseguir o preço ou comprar o breakout, porque a tendência continua válida mas o momentum imediato perdeu força. A entrada em 3,3435 fica perto da EMA20/suporte, o stop está a cerca de 1,5 ATR e o alvo acima do máximo recente mantém RR suficiente após custos.",
+   "created": "2026-09-29T22:00:20+00:00",
+   "expires": "2026-09-30T02:00:20+00:00",
+   "atr": 0.08242603092320555,
+   "setup": "pullback_limit"
+  },
+  "ZRO/USDC": {
+   "symbol": "ZRO/USDC",
+   "type": "BUY_LIMIT",
+   "trigger": 1.60077,
+   "stop": 1.52322,
+   "take_profit": 1.7787,
+   "confidence": 0.6,
+   "reasoning": "Não quero perseguir o preço directamente junto à resistência depois de +9% em 5 velas, mas a tendência de curto prazo ainda favorece comprar recuos. A zona 1.60 coincide com EMA20 1h/suporte recente e oferece melhor assimetria do que entrada a mercado. O setup de pullback também tem melhor histórico recente no bot e mantém R/R adequado após custos.",
+   "created": "2026-09-29T23:00:20+00:00",
+   "expires": "2026-09-30T03:00:20+00:00",
+   "atr": 0.05170276611778652,
+   "setup": "momentum"
   },
   "PUMP/USDC": {
    "symbol": "PUMP/USDC",
    "type": "BUY_LIMIT",
-   "trigger": 0.004866,
-   "stop": 0.00462,
-   "take_profit": 0.00556,
+   "trigger": 0.005558,
+   "stop": 0.00522474,
+   "take_profit": 0.00622451,
    "confidence": 0.6,
-   "reasoning": "Não vale perseguir o preço após a recuperação de curto prazo no 15m, que já está perto de sobrecompra. Prefiro comprar apenas num recuo para 0.004866, junto da EMA50 1h/zona de reteste, mantendo stop abaixo do fundo recente e R:R superior a 1.5 após custos.",
-   "created": "2026-09-29T06:00:20+00:00",
-   "expires": "2026-09-29T10:00:20+00:00",
-   "atr": 0.0001875294417732103,
-   "setup": "trend_pullback"
+   "reasoning": "Prefiro usar a configuração quantitativa de pullback, que tem bom histórico recente, em vez de comprar a mercado perto dos máximos. A entrada em 0.005558 fica junto da EMA20 1h e suporte intradiário, com stop a cerca de 1.6 ATR e R:R perto de 2 antes de custos.",
+   "created": "2026-09-29T23:00:20+00:00",
+   "expires": "2026-09-30T03:00:20+00:00",
+   "atr": 0.00020902144281221882,
+   "setup": "pullback_limit"
   }
  },
  "last_cycle": {
-  "time": "2026-09-29T06:00:20+00:00",
+  "time": "2026-09-29T23:00:20+00:00",
   "analyzed": [
-   "RUNE/USDC",
-   "XLM/USDC",
-   "AVAX/USDC",
+   "NEAR/USDC",
    "LINK/USDC",
-   "PUMP/USDC",
-   "SOL/USDC"
+   "ZRO/USDC",
+   "ICP/USDC",
+   "PUMP/USDC"
   ],
   "skipped": [],
   "from_scanner": [
-   "LINK/USDC",
-   "PUMP/USDC",
-   "SOL/USDC"
+   "ZRO/USDC",
+   "ICP/USDC",
+   "PUMP/USDC"
   ]
  },
  "focus": {
-  "time": "2026-09-29T06:00:20+00:00",
+  "time": "2026-09-29T23:00:20+00:00",
   "auto": true,
   "picks": [
    {
-    "symbol": "LINK/USDC",
-    "reason": "Tem tendência forte em múltiplos prazos, força relativa clara contra BTC e notícia positiva sobre o CCIP 2.0.",
-    "score": 79,
-    "setup": "Pullback em tendência"
+    "symbol": "ZRO/USDC",
+    "reason": "Tem momentum forte, melhor força relativa vs BTC e RSI ainda saudável para continuar a subir.",
+    "score": 67,
+    "setup": "Momentum forte"
+   },
+   {
+    "symbol": "ICP/USDC",
+    "reason": "Mostra tendência forte em timeframes superiores e volume suficiente, apesar da divergência bearish pedir confirmação.",
+    "score": 63,
+    "setup": "Compra no recuo (pendente)"
    },
    {
     "symbol": "PUMP/USDC",
-    "reason": "Mostra pullback saudável numa tendência de alta forte, com RSI neutro e volatilidade suficiente para compensar custos.",
-    "score": 75,
-    "setup": "Pullback em tendência"
-   },
-   {
-    "symbol": "SOL/USDC",
-    "reason": "Tem suporte fundamental com fluxos para ETFs e tendência superior ainda positiva, apesar da fraqueza de curto prazo.",
-    "score": 58,
-    "setup": "Compra no rompimento (pendente)"
+    "reason": "Tem tendência forte e força relativa muito elevada, com volatilidade e liquidez suficientes para um trade curto.",
+    "score": 63,
+    "setup": "Compra no recuo (pendente)"
    }
   ],
   "avoid": [
    {
-    "symbol": "NEAR/USDC",
-    "reason": "A força relativa está fraca e a notícia sobre hackers aumenta o risco de ruído negativo."
+    "symbol": "SUI/USDC",
+    "reason": "A tendência de curto prazo está fraca e o setup de rompimento ainda não tem confirmação clara."
    },
    {
-    "symbol": "MARSCOIN/USDC",
-    "reason": "Está esticado após uma subida muito rápida, com risco de exaustão e pior relação risco-recompensa."
+    "symbol": "ETH/USDC",
+    "reason": "A volatilidade é baixa para cobrir bem os custos e o preço parece sem direção no 1h."
    },
    {
-    "symbol": "UNI/USDC",
-    "reason": "A tendência continua claramente fraca e o setup de ressalto de sobrevenda vai contra o momentum dominante."
+    "symbol": "TAO/USDC",
+    "reason": "Mostra fraqueza recente contra BTC e falta de tração para priorizar agora."
    }
   ],
-  "stance": "normal",
-  "view": "Mercado misto e lateral no BTC, com força seletiva em alguns nomes e cautela antes dos eventos macro de amanhã.",
+  "stance": "aggressive",
+  "view": "Mercado em risco-on com BTC em tendência ascendente e breadth positiva, mas prefiro setups com força relativa clara e sem sinais de exaustão.",
   "regime": {
-   "state": "neutral",
-   "label": "misto",
-   "breadth_up_pct": 25,
-   "breadth_above_ema50_pct": 57,
-   "avg_change_24h_pct": 0.32,
-   "btc_trend": "sideways"
+   "state": "risk_on",
+   "label": "favorável",
+   "breadth_up_pct": 17,
+   "breadth_above_ema50_pct": 67,
+   "avg_change_24h_pct": 0.86,
+   "benchmark": "BTC",
+   "benchmark_trend": "up"
   },
   "source": "ia"
  }

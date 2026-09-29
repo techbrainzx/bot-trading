@@ -34,10 +34,15 @@ EXCHANGE_API_KEY = os.getenv("EXCHANGE_API_KEY", "").strip()
 EXCHANGE_API_SECRET = os.getenv("EXCHANGE_API_SECRET", "").strip()
 TESTNET_API_KEY = os.getenv("TESTNET_API_KEY", "").strip()
 TESTNET_API_SECRET = os.getenv("TESTNET_API_SECRET", "").strip()
+T212_API_KEY = os.getenv("T212_API_KEY", "").strip()            # Trading 212 (conta real)
+T212_API_SECRET = os.getenv("T212_API_SECRET", "").strip()
+T212_DEMO_API_KEY = os.getenv("T212_DEMO_API_KEY", "").strip()  # Trading 212 (conta demo)
+T212_DEMO_API_SECRET = os.getenv("T212_DEMO_API_SECRET", "").strip()
 
 # ============================================================
 #  MERCADO
 # ============================================================
+MARKET = "crypto"                          # crypto (Binance) | stocks (ações e ETFs, Trading 212)
 EXCHANGE = "binance"
 # Na UE (MiCA) a Binance não permite pares com USDT: usa USDC (≈ 1 dólar) ou EUR.
 QUOTE = "USDC"
@@ -119,6 +124,14 @@ MAX_SPREAD_PCT = 0.25
 MIN_ORDER_VALUE = 6.0           # ordem mínima (a Binance exige ~5; a margem evita restos impossíveis de vender)
 PENDING_ORDER_CANDLES = 4       # validade das ordens pendentes (em velas do timeframe principal)
 
+# Técnicas dinâmicas de saída e de entrada
+PARTIAL_TP_R = 1.0              # vende uma parte quando o lucro chega a 1x o risco...
+PARTIAL_TP_PCT = 50             # ...esta percentagem (0 desliga) e sobe o stop para o preço de entrada
+TIME_STOP_CANDLES = 24          # fecha trades sem progresso (< +0.3R) ao fim de N velas (0 desliga)
+LOSS_STREAK_REDUCE = 3          # depois de N perdas seguidas, arrisca metade até voltar a ganhar
+EVENT_BLACKOUT_BEFORE_MIN = 45  # sem novas entradas X min antes de eventos macro de alto impacto (Fed, CPI...)
+EVENT_BLACKOUT_AFTER_MIN = 30   # ...e Y min depois
+
 # Proteção automática de lucros
 BREAKEVEN_AT_R = 1.0            # ao ganhar 1x o risco, o stop sobe para o preço de entrada (+custos)
 TRAIL_START_R = 1.5             # a partir de 1.5x o risco, ativa trailing stop
@@ -127,6 +140,35 @@ TRAIL_ATR_MULT = 2.5            # trailing stop = máximo desde a entrada - 2.5 
 # Custos (Binance spot: 0.1% por ordem)
 FEE_PCT = 0.10
 SLIPPAGE_PCT = 0.05
+CRYPTO_FEE_PCT = 0.10
+CRYPTO_MIN_ORDER = 6.0
+
+# ============================================================
+#  AÇÕES E ETFs
+# ============================================================
+STOCK_CURRENCY = "EUR"          # moeda da conta (Trading 212)
+STOCK_STRATEGY = "ativo"        # ativo = IA como em cripto | tendencia = rotação de ETFs por momentum (longo prazo)
+STOCK_FEE_PCT = 0.15            # Trading 212: sem comissão, mas 0,15% de câmbio em ações em dólares
+STOCK_MIN_ORDER = 2.0
+STOCK_ASSETS = ["AAPL", "MSFT", "NVDA", "SXR8.DE"]  # ativos fixos em ações (só com a escolha automática desligada)
+EARNINGS_BLACKOUT_DAYS = 2      # sem novas entradas nos N dias antes dos resultados trimestrais
+EXIT_BEFORE_EARNINGS = True     # fecha posições na véspera dos resultados (evita saltos de preço)
+STOCK_UNIVERSE = [
+    # ações americanas muito líquidas (disponíveis para investidores europeus)
+    "AAPL", "MSFT", "NVDA", "AMZN", "GOOGL", "META", "TSLA", "AVGO", "AMD", "NFLX", "JPM", "V", "MA", "LLY",
+    "XOM", "COST", "WMT", "HD", "KO", "PEP", "CRM", "ORCL", "ADBE", "QCOM", "BAC", "DIS", "PLTR", "UBER",
+    "COIN", "MU", "INTC", "UNH",
+    # ETFs UCITS em euros na Xetra (os ETFs americanos como SPY/QQQ não são permitidos a particulares na UE)
+    "SXR8.DE", "SXRV.DE", "EUNL.DE", "VWCE.DE", "IS3N.DE", "EXSA.DE", "4GLD.DE", "QDVE.DE", "DBXD.DE",
+    "IUSN.DE", "EXV1.DE", "SXRT.DE",
+]
+# Estratégia de tendência (rotação de ETFs): compra os ETFs com melhor momentum que estão acima da média de 200 dias
+TREND_UNIVERSE = ["SXR8.DE", "SXRV.DE", "EUNL.DE", "IS3N.DE", "EXSA.DE", "4GLD.DE", "IUSN.DE", "DBXD.DE",
+                  "QDVE.DE", "EUNH.DE"]
+TREND_CASH_ETF = "XEON.DE"      # "dinheiro" (taxa overnight do euro) quando nada está em tendência
+TREND_TOP_N = 3                 # quantos ETFs ter ao mesmo tempo
+TREND_SMA_DAYS = 200            # filtro de tendência (Faber, 2007)
+TREND_REBALANCE = "monthly"     # monthly | weekly
 
 # ============================================================
 #  CICLO
@@ -139,7 +181,10 @@ EQUITY_POINT_SECONDS = 300      # frequência dos pontos da curva de capital
 #  Definições editáveis pela interface (persistidas em data/settings.json)
 # ============================================================
 EDITABLE = {
-    "MODE": str, "USE_TESTNET": bool, "LIVE_CONFIRMED": bool,
+    "MODE": str, "USE_TESTNET": bool, "LIVE_CONFIRMED": bool, "MARKET": str,
+    "STOCK_CURRENCY": str, "STOCK_STRATEGY": str, "STOCK_UNIVERSE": list, "STOCK_ASSETS": list,
+    "EARNINGS_BLACKOUT_DAYS": int,
+    "EXIT_BEFORE_EARNINGS": bool, "TREND_TOP_N": int, "TREND_REBALANCE": str,
     "QUOTE": str, "ASSETS": list, "PRIMARY_TIMEFRAME": str, "PROFILE": str,
     "AUTO_SELECT": bool, "AI_DAILY_CALL_LIMIT": int,
     "SCANNER_ENABLED": bool, "SCAN_UNIVERSE": int, "SCAN_TOP": int, "SCAN_MIN_SCORE": int, "ONLY_WITH_SETUP": bool,
@@ -152,6 +197,8 @@ EDITABLE = {
     "MAX_DAILY_LOSS_PCT": float, "MAX_DRAWDOWN_PCT": float, "COOLDOWN_AFTER_LOSS_MINUTES": int,
     "PENDING_ORDER_CANDLES": int,
     "BREAKEVEN_AT_R": float, "TRAIL_START_R": float, "TRAIL_ATR_MULT": float,
+    "PARTIAL_TP_R": float, "PARTIAL_TP_PCT": int, "TIME_STOP_CANDLES": int, "LOSS_STREAK_REDUCE": int,
+    "EVENT_BLACKOUT_BEFORE_MIN": int, "EVENT_BLACKOUT_AFTER_MIN": int,
 }
 
 
@@ -173,8 +220,16 @@ def apply(values: dict):
     for k, v in _migrate(values).items():
         if k in EDITABLE:
             g[k] = list(v) if EDITABLE[k] is list else EDITABLE[k](v)
-    g["SYMBOLS"] = [f"{a}/{g['QUOTE']}" for a in g["ASSETS"]]
-    g["CONTEXT_TIMEFRAMES"] = CONTEXT_TIMEFRAMES_BY_PRIMARY.get(g["PRIMARY_TIMEFRAME"], ["15m", "4h", "1d"])
+    if g["MARKET"] == "stocks":
+        if g["PRIMARY_TIMEFRAME"] not in ("15m", "1h"):
+            g["PRIMARY_TIMEFRAME"] = "1h"
+        g["SYMBOLS"] = list(g["STOCK_ASSETS"])
+        g["CONTEXT_TIMEFRAMES"] = STOCK_CONTEXT_TIMEFRAMES.get(g["PRIMARY_TIMEFRAME"], ["15m", "1d", "1wk"])
+        g["FEE_PCT"], g["MIN_ORDER_VALUE"] = g["STOCK_FEE_PCT"], g["STOCK_MIN_ORDER"]
+    else:
+        g["SYMBOLS"] = [f"{a}/{g['QUOTE']}" for a in g["ASSETS"]]
+        g["CONTEXT_TIMEFRAMES"] = CONTEXT_TIMEFRAMES_BY_PRIMARY.get(g["PRIMARY_TIMEFRAME"], ["15m", "4h", "1d"])
+        g["FEE_PCT"], g["MIN_ORDER_VALUE"] = g["CRYPTO_FEE_PCT"], g["CRYPTO_MIN_ORDER"]
 
 
 def save(values: dict):
@@ -194,16 +249,39 @@ def set_secret(name: str, value: str):
     globals()[name] = value
 
 
-def mode_key(mode: str | None = None, testnet: bool | None = None) -> str:
-    """paper | testnet | live  (cada um tem a sua carteira e histórico)."""
+STOCK_CONTEXT_TIMEFRAMES = {"15m": ["5m", "1h", "1d"], "1h": ["15m", "1d", "1wk"]}
+
+
+def mode_key(mode: str | None = None, testnet: bool | None = None, market: str | None = None) -> str:
+    """Cripto: paper | testnet | live. Ações: stocks_paper | stocks_demo | stocks_live.
+    Cada um tem a sua carteira e histórico."""
     mode = MODE if mode is None else mode
     testnet = USE_TESTNET if testnet is None else testnet
-    if mode == "paper":
-        return "paper"
-    return "testnet" if testnet else "live"
+    market = MARKET if market is None else market
+    base = "paper" if mode == "paper" else ("testnet" if testnet else "live")
+    if market == "stocks":
+        return {"paper": "stocks_paper", "testnet": "stocks_demo", "live": "stocks_live"}[base]
+    return base
+
+
+def account_currency() -> str:
+    return STOCK_CURRENCY if MARKET == "stocks" else QUOTE
+
+
+def benchmark() -> str:
+    """Referência do mercado para força relativa e clima: BTC em cripto, S&P 500 (SPY, só para análise) em ações."""
+    return "SPY" if MARKET == "stocks" else f"BTC/{QUOTE}"
+
+
+def benchmark_label() -> str:
+    return "S&P 500" if MARKET == "stocks" else "BTC"
 
 
 def exchange_keys(key: str) -> tuple[str, str]:
+    if key == "stocks_demo":
+        return T212_DEMO_API_KEY, T212_DEMO_API_SECRET
+    if key == "stocks_live":
+        return T212_API_KEY, T212_API_SECRET
     if key == "testnet":
         return TESTNET_API_KEY, TESTNET_API_SECRET
     return EXCHANGE_API_KEY, EXCHANGE_API_SECRET

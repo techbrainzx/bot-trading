@@ -8,6 +8,7 @@ Trading Bot IA - aplicação com interface gráfica.
 import argparse
 import calendar
 import json
+import re
 import logging
 import secrets
 import socket
@@ -24,10 +25,10 @@ from fastapi.staticfiles import StaticFiles
 import config
 from bot.broker import verify_keys
 from bot.controller import Controller
-from bot.engine import ConfigError
+from bot.engine import ConfigError, make_market_data
 from bot.journal import setup_logging
-from bot.market import MarketData
-from bot.news import FEEDS, NewsHub
+from bot.news import FEEDS, STOCK_FEEDS, NewsHub
+from bot.t212 import verify_t212
 from bot.scanner import Scanner
 from bot.trader import trade_stats
 
@@ -43,7 +44,8 @@ MODEL_OPTIONS = [
 ]
 ASSET_OPTIONS = ["BTC", "ETH", "SOL", "XRP", "BNB", "DOGE", "ADA", "LINK", "SUI", "NEAR", "AVAX", "LTC", "HBAR",
                  "DOT", "TRX", "UNI", "AAVE", "ONDO", "TAO", "ENA", "XLM", "PEPE"]
-CHART_TFS = ["15m", "1h", "4h", "1d"]
+CHART_TFS = {"crypto": ["15m", "1h", "4h", "1d"], "stocks": ["15m", "1h", "1d", "1wk"]}
+TICKER_RX = re.compile(r"^[A-Z0-9][A-Z0-9.\-]{0,11}$")
 BOUNDS = {
     "RISK_PER_TRADE_PCT": (0.1, 5), "RISK_FIXED_AMOUNT": (0.05, 100_000), "MAX_POSITION_PCT": (5, 100),
     "MAX_OPEN_POSITIONS": (1, 10), "MIN_CONFIDENCE": (0.5, 0.95), "MIN_RISK_REWARD": (1.0, 5),
@@ -52,6 +54,9 @@ BOUNDS = {
     "LIVE_CAPITAL_USDT": (10, 10_000_000), "BREAKEVEN_AT_R": (0, 5), "TRAIL_START_R": (0, 10),
     "TRAIL_ATR_MULT": (0, 10), "SCAN_UNIVERSE": (5, 60), "SCAN_TOP": (0, 8), "SCAN_MIN_SCORE": (20, 90),
     "PENDING_ORDER_CANDLES": (1, 24), "AI_DAILY_CALL_LIMIT": (0, 5000),
+    "PARTIAL_TP_R": (0.5, 3), "PARTIAL_TP_PCT": (0, 90), "TIME_STOP_CANDLES": (0, 500), "LOSS_STREAK_REDUCE": (0, 10),
+    "EVENT_BLACKOUT_BEFORE_MIN": (0, 240), "EVENT_BLACKOUT_AFTER_MIN": (0, 240),
+    "EARNINGS_BLACKOUT_DAYS": (0, 10), "TREND_TOP_N": (1, 6),
 }
 CHOICES = {
     "PRIMARY_TIMEFRAME": ["15m", "1h", "4h"],
@@ -60,9 +65,12 @@ CHOICES = {
     "QUOTE": ["USDC", "EUR", "USDT"],
     "PROFILE": ["conservador", "equilibrado", "agressivo", "personalizado"],
     "RISK_MODE": ["percent", "fixed"],
+    "STOCK_STRATEGY": ["ativo", "tendencia"],
+    "STOCK_CURRENCY": ["EUR", "USD"],
+    "TREND_REBALANCE": ["monthly", "weekly"],
 }
-BOOLS = ["NEWS_ENABLED", "SCANNER_ENABLED", "ONLY_WITH_SETUP", "AUTO_SELECT"]
-USER_SETTINGS = ["ASSETS", *CHOICES, *BOOLS, *BOUNDS]
+BOOLS = ["NEWS_ENABLED", "SCANNER_ENABLED", "ONLY_WITH_SETUP", "AUTO_SELECT", "EXIT_BEFORE_EARNINGS"]
+USER_SETTINGS = ["ASSETS", "STOCK_UNIVERSE", "STOCK_ASSETS", *CHOICES, *BOOLS, *BOUNDS]
 
 
 # ============================================================ logs em memória para a interface
@@ -92,15 +100,17 @@ class UIMarket:
 
     def __init__(self):
         self.lock = threading.Lock()
-        self.md = None
+        self.mds: dict = {}
         self.cache: dict = {}
 
     def _md(self):
-        if self.md is None:
-            self.md = MarketData(config.EXCHANGE)
-        return self.md
+        md = self.mds.get(config.MARKET)
+        if md is None:
+            md = self.mds[config.MARKET] = make_market_data(config.MARKET)
+        return md
 
     def cached(self, key, ttl, fn):
+        key = (config.MARKET,) + tuple(key)
         hit = self.cache.get(key)
         if hit and time.time() - hit[0] < ttl:
             return hit[1]
@@ -114,23 +124,41 @@ class UIMarket:
         if not symbols:
             return {}
         try:
-            return self.cached(("tickers", tuple(symbols)), 4, lambda md: md.tickers(symbols))
+            return self.cached(("tickers", tuple(symbols)), 4 if config.MARKET == "crypto" else 15,
+                               lambda md: md.tickers(symbols))
         except Exception as e:
             log.debug("tickers falhou: %s", e)
-            hit = self.cache.get(("tickers", tuple(symbols)))
+            hit = self.cache.get((config.MARKET, "tickers", tuple(symbols)))
             return hit[1] if hit else {}
 
     def candles(self, symbol, tf):
-        return self.cached(("candles", symbol, tf), 10, lambda md: md.ohlcv(symbol, tf, 400, closed_only=False))
+        return self.cached(("candles", symbol, tf), 10 if config.MARKET == "crypto" else 60,
+                           lambda md: md.ohlcv(symbol, tf, 400, closed_only=False))
 
     def markets(self):
         return self.cached(("markets",), 3600, lambda md: md.ex.markets)
 
+    def has_symbol(self, symbol) -> bool:
+        return symbol in self.markets() or self.cached(("has", symbol), 3600, lambda md: md.has_symbol(symbol))
+
+    def market_status(self):
+        try:
+            return self.cached(("status",), 30, lambda md: md.market_status())
+        except Exception:
+            return []
+
 
 ui = UIMarket()
-ui_news = NewsHub()  # sem IA: só manchetes, calendário e dados globais
+_ui_news: dict = {}  # por mercado, sem IA: só manchetes, calendário e dados globais
 ui_scan_lock = threading.Lock()
-ui_scanner: Scanner | None = None
+_ui_scanners: dict = {}
+
+
+def ui_news() -> NewsHub:
+    hub = _ui_news.get(config.MARKET)
+    if hub is None:
+        hub = _ui_news[config.MARKET] = NewsHub(market=config.MARKET)
+    return hub
 
 app = FastAPI(docs_url=None, redoc_url=None, openapi_url=None)
 
@@ -191,7 +219,10 @@ def status():
     focus_syms = [p["symbol"] for p in (st.get("focus") or {}).get("picks", [])]
     top = focus_syms or [r["symbol"] for r in (scan or {}).get("results", [])[:4] if r.get("setup")]
     fixed = [] if config.AUTO_SELECT else list(config.SYMBOLS)
-    tab_syms = list(dict.fromkeys(list(positions) + top + list(pending) + fixed)) or [f"BTC/{config.QUOTE}"]
+    if config.MARKET == "stocks" and config.STOCK_STRATEGY == "tendencia":
+        top = list(((st.get("trend") or {}).get("targets") or {}).keys()) or config.TREND_UNIVERSE[:4]
+    default = config.STOCK_ASSETS[:4] if config.MARKET == "stocks" else [config.benchmark()]
+    tab_syms = list(dict.fromkeys(list(positions) + top + list(pending) + fixed)) or default
     tick = ui.tickers(tab_syms)
     price = {s: float(t["last"]) for s, t in tick.items() if t.get("last")}
 
@@ -199,7 +230,7 @@ def status():
     invested = 0.0
     for sym, p in positions.items():
         px = price.get(sym, p["entry_price"])
-        value = p["qty"] * px
+        value = p["qty"] * px * p.get("fx", 1.0)
         invested += value
         risk_unit = p["entry_price"] - p["initial_stop"]
         pnl = value - p["entry_cost"]
@@ -209,6 +240,8 @@ def status():
             "r": (px - p["entry_price"]) / risk_unit if risk_unit > 0 else None,
             "stop": p["stop"], "initial_stop": p["initial_stop"], "take_profit": p["take_profit"],
             "opened_at": p["opened_at"], "confidence": p.get("confidence"), "reasoning": p.get("reasoning", ""),
+            "setup": p.get("setup"), "partial_done": p.get("partial_done"), "let_run": p.get("let_run"),
+            "rules_note": p.get("rules_note"),
         })
     equity = st["cash"] + invested
     start = st["start_cash"] or 1
@@ -236,14 +269,19 @@ def status():
         "ai_limit": config.AI_DAILY_CALL_LIMIT,
         "usage_today": st["usage"].get(today, {}),
         "exchange_usdt": snap["exchange_usdt"], "capital_limit": config.LIVE_CAPITAL_USDT,
-        "symbols": config.SYMBOLS, "tab_symbols": tab_syms, "quote": config.QUOTE, "profile": config.PROFILE,
+        "symbols": config.SYMBOLS, "tab_symbols": tab_syms, "quote": config.account_currency(), "profile": config.PROFILE,
+        "market": config.MARKET, "benchmark_label": config.benchmark_label(), "chart_tfs": CHART_TFS[config.MARKET],
+        "exchanges": ui.market_status() if config.MARKET == "stocks" else [],
+        "strategy": config.STOCK_STRATEGY if config.MARKET == "stocks" else "ativo",
+        "trend": st.get("trend") if config.MARKET == "stocks" else None,
         "timeframe": config.PRIMARY_TIMEFRAME, "model": config.DECISION_MODEL,
         "scanner": {"enabled": config.SCANNER_ENABLED, "top": config.SCAN_TOP, "universe": config.SCAN_UNIVERSE},
         "risk_mode": config.RISK_MODE, "risk_fixed": config.RISK_FIXED_AMOUNT, "risk_pct": config.RISK_PER_TRADE_PCT,
         "tickers": {s: {"last": price.get(s), "change_pct": (tick.get(s) or {}).get("percentage")}
                     for s in tab_syms},
         "keys": {"openai": mask(config.OPENAI_API_KEY), "binance": mask(config.EXCHANGE_API_KEY),
-                 "testnet": mask(config.TESTNET_API_KEY)},
+                 "testnet": mask(config.TESTNET_API_KEY), "t212": mask(config.T212_API_KEY),
+                 "t212_demo": mask(config.T212_DEMO_API_KEY)},
         "live_confirmed": config.LIVE_CONFIRMED, "use_testnet": config.USE_TESTNET,
     }
 
@@ -252,15 +290,16 @@ def recent_decisions(st: dict) -> dict:
     """Última decisão de cada par analisado recentemente (fixos, posições, pendentes e radar)."""
     out = {}
     for sym, hist in st["decisions"].items():
-        if hist and sym.endswith("/" + config.QUOTE):
+        ok = ("/" not in sym) if config.MARKET == "stocks" else sym.endswith("/" + config.QUOTE)
+        if hist and ok:
             out[sym] = hist[-1]
     ordered = sorted(out.items(), key=lambda kv: kv[1].get("time") or "", reverse=True)
     return dict(ordered[:12])
 
 
 def latest_scan() -> dict | None:
-    eng_scan = controller.snapshot.get("scan") if controller else None
-    own = ui_scanner.last if ui_scanner else None
+    eng_scan = controller.snapshot.get("scan") if controller and controller.snapshot.get("market") == config.MARKET else None
+    own = _ui_scanners[config.MARKET].last if config.MARKET in _ui_scanners else None
     cands = [x for x in (eng_scan, own) if x and x.get("time")]
     return max(cands, key=lambda x: x["time"]) if cands else None
 
@@ -269,21 +308,21 @@ def latest_scan() -> dict | None:
 def scan_results():
     scan = latest_scan()
     if not scan:
-        return {"time": None, "results": [], "universe": 0, "quote": config.QUOTE}
+        return {"time": None, "results": [], "universe": 0, "quote": config.account_currency()}
     picks = {p["symbol"]: p.get("reason") for p in (controller.snapshot["state"].get("focus") or {}).get("picks", [])}
     rows = [{**r, "picked": r["symbol"] in picks, "pick_reason": picks.get(r["symbol"])} for r in scan["results"][:40]]
-    return {**scan, "results": rows, "quote": config.QUOTE}
+    return {**scan, "results": rows, "quote": config.account_currency()}
 
 
 @app.post("/api/scan")
 def scan_now():
-    global ui_scanner
     if not ui_scan_lock.acquire(blocking=False):
         raise ValueError("O radar já está a correr.")
     try:
-        if ui_scanner is None:
-            ui_scanner = Scanner(MarketData(config.EXCHANGE))
-        ui_scanner.scan()
+        sc = _ui_scanners.get(config.MARKET)
+        if sc is None:
+            sc = _ui_scanners[config.MARKET] = Scanner(make_market_data(config.MARKET))
+        sc.scan()
     finally:
         ui_scan_lock.release()
     return scan_results()
@@ -292,12 +331,15 @@ def scan_now():
 @app.get("/api/news")
 def news():
     asset = None
-    heads = ui_news.headlines(asset, hours=36, limit=60)
+    hub = ui_news()
+    heads = hub.headlines(asset, hours=36, limit=60)
+    feeds = STOCK_FEEDS if config.MARKET == "stocks" else FEEDS
     return {
         "headlines": heads,
-        "events": ui_news.calendar(),
-        "global": ui_news.global_market(),
-        "sources": ui_news.feed_status or {k: "?" for k in FEEDS},
+        "events": hub.calendar(),
+        "global": hub.global_market(),
+        "vix": ui._md().fear_greed() if config.MARKET == "stocks" else None,
+        "sources": hub.feed_status or {k: "?" for k in feeds},
     }
 
 
@@ -358,10 +400,10 @@ def logs(after: int = 0):
 
 @app.get("/api/candles")
 def candles(symbol: str, tf: str = "1h"):
-    if tf not in CHART_TFS:
-        raise ValueError("timeframe inválido")
-    if symbol not in ui.markets():
-        raise ValueError("par desconhecido")
+    if tf not in CHART_TFS[config.MARKET]:
+        tf = "1h"
+    if not ui.has_symbol(symbol):
+        raise ValueError("ativo desconhecido")
     df = ui.candles(symbol, tf)
     tf_s = ui._md().tf_ms(tf) // 1000
     first = int(df["ts"].iloc[0]) // 1000 if len(df) else 0
@@ -445,9 +487,34 @@ def reset_test(payload: dict = Body(...)):
     balance = float(payload.get("balance") or config.PAPER_START_BALANCE)
     lo, hi = BOUNDS["PAPER_START_BALANCE"]
     if not lo <= balance <= hi:
-        raise ValueError(f"O saldo tem de estar entre {lo:,.0f} e {hi:,.0f} USDT.")
+        raise ValueError(f"O saldo tem de estar entre {lo:,.0f} e {hi:,.0f} {config.account_currency()}.")
     run(controller.cmd_reset_test, balance)
     return {"ok": True}
+
+
+@app.post("/api/market")
+def set_market(payload: dict = Body(...)):
+    market = payload.get("market")
+    if market not in ("crypto", "stocks"):
+        raise ValueError("mercado inválido")
+    run(controller.cmd_set_market, market)
+    return {"ok": True}
+
+
+@app.post("/api/keys/t212")
+def save_t212_keys(payload: dict = Body(...)):
+    demo = bool(payload.get("testnet"))
+    key = (payload.get("api_key") or "").strip()
+    secret = (payload.get("api_secret") or "").strip()
+    if not key and not secret:
+        key, secret = config.exchange_keys("stocks_demo" if demo else "stocks_live")
+    check = verify_t212(key, secret, demo)
+    if check["usdt_free"] is not None and payload.get("api_key"):
+        prefix = "T212_DEMO" if demo else "T212"
+        config.set_secret(f"{prefix}_API_KEY", key)
+        config.set_secret(f"{prefix}_API_SECRET", secret)
+        check["saved"] = True
+    return check
 
 
 @app.post("/api/mode")
@@ -465,12 +532,16 @@ def set_mode(payload: dict = Body(...)):
     lo, hi = BOUNDS["LIVE_CAPITAL_USDT"]
     if not lo <= capital <= hi:
         raise ValueError(f"O capital tem de estar entre {lo:,.0f} e {hi:,.0f} USDT.")
-    key, secret = config.exchange_keys("testnet" if testnet else "live")
-    check = verify_keys(config.EXCHANGE, key, secret, sandbox=testnet)
+    if config.MARKET == "stocks":
+        key, secret = config.exchange_keys("stocks_demo" if testnet else "stocks_live")
+        check = verify_t212(key, secret, testnet)
+    else:
+        key, secret = config.exchange_keys("testnet" if testnet else "live")
+        check = verify_keys(config.EXCHANGE, key, secret, sandbox=testnet)
     if not check["ok"]:
         raise ValueError(" ".join(check["problems"]))
     if check["usdt_free"] is not None and capital > check["usdt_free"] + 1e-6 and not testnet:
-        raise ValueError(f"O capital ({capital:,.2f}) é maior do que o saldo livre em {config.QUOTE} "
+        raise ValueError(f"O capital ({capital:,.2f}) é maior do que o saldo livre em {config.account_currency()} "
                          f"({check['usdt_free']:,.2f}).")
     run(controller.cmd_set_mode, "live", testnet, capital)
     return {"ok": True}
@@ -513,7 +584,9 @@ def get_settings():
     cur = config.current()
     return {
         "values": {k: cur[k] for k in USER_SETTINGS},
+        "market": config.MARKET,
         "options": {"models": MODEL_OPTIONS, "assets": ASSET_OPTIONS, "timeframes": CHOICES["PRIMARY_TIMEFRAME"],
+                    "stock_universe_default": config.STOCK_UNIVERSE,
                     "efforts": CHOICES["REASONING_EFFORT"], "quotes": CHOICES["QUOTE"], "bounds": BOUNDS,
                     "profiles": config.PROFILES},
     }
@@ -542,12 +615,31 @@ def save_settings(payload: dict = Body(...)):
         st = controller.snapshot["state"]
         if st["positions"] or st.get("pending"):
             raise ValueError("Fecha as posições e ordens pendentes antes de mudar a moeda.")
+    if "STOCK_UNIVERSE" in payload or "STOCK_ASSETS" in payload:
+        stock_md = ui.mds.get("stocks") or make_market_data("stocks")
+        for key, limit in (("STOCK_UNIVERSE", 80), ("STOCK_ASSETS", 8)):
+            if key not in payload:
+                continue
+            items = [str(x).strip().upper().replace(".DE", ".DE") for x in payload[key] if str(x).strip()]
+            items = list(dict.fromkeys(items))
+            if len(items) > limit:
+                raise ValueError(f"No máximo {limit} ativos em {key}.")
+            bad = [x for x in items if not TICKER_RX.match(x)]
+            known = set(config.STOCK_UNIVERSE) | set(config.TREND_UNIVERSE)
+            bad += [x for x in items if x not in known and x not in bad and not stock_md.has_symbol(x)]
+            if bad:
+                raise ValueError(f"Ativos não encontrados no Yahoo Finance: {', '.join(bad)}")
+            values[key] = items
+    if values.get("STOCK_CURRENCY", config.STOCK_CURRENCY) != config.STOCK_CURRENCY and config.MARKET == "stocks":
+        st = controller.snapshot["state"]
+        if st["positions"] or st.get("pending"):
+            raise ValueError("Fecha as posições antes de mudar a moeda da conta.")
     if "ASSETS" in payload:
-        markets = ui.markets()
+        markets = ui.markets() if config.MARKET == "crypto" else {}
         assets = [a.strip().upper() for a in dict.fromkeys(payload["ASSETS"]) if isinstance(a, str) and a.strip()]
         if len(assets) > 8:
             raise ValueError("No máximo 8 pares fixos.")
-        bad = [a for a in assets if f"{a}/{quote}" not in markets]
+        bad = [a for a in assets if markets and f"{a}/{quote}" not in markets]
         if bad:
             raise ValueError(f"Não existe par em {quote} para: {', '.join(bad)}")
         values["ASSETS"] = assets
@@ -603,9 +695,10 @@ def main():
 
     def warm_up():  # notícias e calendário prontos antes de abrir o separador
         try:
-            ui_news.refresh_feeds(force=True)
-            ui_news.calendar()
-            ui_news.global_market()
+            hub = ui_news()
+            hub.refresh_feeds(force=True)
+            hub.calendar()
+            hub.global_market()
         except Exception as e:
             log.debug("Pré-carregamento de notícias falhou: %s", e)
     threading.Thread(target=warm_up, name="news-warmup", daemon=True).start()

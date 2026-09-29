@@ -234,9 +234,34 @@ async function refreshStatus() {
   }
 }
 
+function renderTfTabs(s) {
+  const tfs = s.chart_tfs || ["15m", "1h", "4h", "1d"];
+  const host = $("#tfTabs");
+  if (host.dataset.sig === tfs.join()) return;
+  host.dataset.sig = tfs.join();
+  if (!tfs.includes(S.tf)) S.tf = "1h";
+  host.innerHTML = tfs.map((tf) => `<button data-tf="${tf}" class="${tf === S.tf ? "active" : ""}">${tf}</button>`).join("");
+  $$("button", host).forEach((b) => (b.onclick = () => {
+    S.tf = b.dataset.tf;
+    $$("button", host).forEach((x) => x.classList.toggle("active", x === b));
+    refreshCandles(true);
+  }));
+}
+
+function modeKind(s) {  // paper | testnet | live (para cores e textos, em qualquer mercado)
+  return s.mode === "paper" ? "paper" : /testnet|demo/.test(s.mode_key) ? "testnet" : "live";
+}
+
 function renderStatus(s) {
-  document.body.dataset.mode = s.mode_key;
-  $$(".mode-btn").forEach((b) => {
+  document.body.dataset.mode = modeKind(s);
+  document.body.dataset.market = s.market;
+  $$(".market-btn").forEach((b) => {
+    const on = b.dataset.market === s.market;
+    b.classList.toggle("active", on);
+    b.setAttribute("aria-checked", on);
+  });
+  renderTfTabs(s);
+  $$(".mode-btn[data-mode]").forEach((b) => {
     const on = b.dataset.mode === s.mode;
     b.classList.toggle("active", on);
     b.setAttribute("aria-checked", on);
@@ -261,17 +286,21 @@ function renderStatus(s) {
 
   // banner
   const risk = s.risk_mode === "fixed" ? `risco ${fmtMoney(s.risk_fixed)} ${s.quote} por trade` : `risco ${nf(2).format(s.risk_pct)}% por trade`;
-  const radar = s.scanner.enabled ? `radar ${s.scanner.universe} moedas` : "radar desligado";
-  const extra = ` <span class="sep">·</span> perfil ${PROFILE_PT[s.profile] || s.profile} <span class="sep">·</span> ${radar} <span class="sep">·</span> ${risk}`;
+  const stocks = s.market === "stocks";
+  const trend = stocks && s.strategy === "tendencia";
+  const radar = trend ? `tendência de ETFs (sem IA)` : s.auto_select ? `escolha automática entre ${s.scanner.universe} ${stocks ? "ativos" : "moedas"}` : "pares fixos";
+  const exch = stocks && s.exchanges.length ? ` <span class="sep">·</span> ` + s.exchanges.map((e) => `<span class="exch ${e.open ? "open" : ""}" title="${esc(e.name)} ${esc(e.hours)}">${esc(e.short || e.name)} ${e.open ? "aberta" : "fechada"}</span>`).join(" ") : "";
+  const extra = ` <span class="sep">·</span> ${trend ? "" : `perfil ${PROFILE_PT[s.profile] || s.profile} <span class="sep">·</span> `}${radar}${trend ? "" : ` <span class="sep">·</span> ${risk}`}${exch}`;
+  const mk = stocks ? "AÇÕES & ETFs · " : "CRIPTO · ";
   const banner = $("#modeBanner");
   let html;
-  if (s.mode_key === "paper") {
-    html = `${icon("flask")}<span><b>MODO TESTE</b> <span class="sep">·</span> dinheiro fictício com preços reais${extra}</span>`;
-  } else if (s.mode_key === "testnet") {
-    html = `${icon("shield")}<span><b>MODO REAL · TESTNET</b> <span class="sep">·</span> dinheiro fictício na Binance Testnet <span class="sep">·</span> capital ${fmtMoney(s.capital_limit, 0)} ${s.quote}${extra}</span>`;
+  if (modeKind(s) === "paper") {
+    html = `${icon("flask")}<span><b>${mk}MODO TESTE</b> <span class="sep">·</span> dinheiro fictício com preços reais${extra}</span>`;
+  } else if (modeKind(s) === "testnet") {
+    html = `${icon("shield")}<span><b>${mk}MODO REAL · DEMO</b> <span class="sep">·</span> dinheiro fictício na ${stocks ? "conta demo da Trading 212" : "Binance Testnet"} <span class="sep">·</span> capital ${fmtMoney(s.capital_limit, 0)} ${s.quote}${extra}</span>`;
   } else {
     const bal = s.exchange_usdt != null ? ` <span class="sep">·</span> saldo livre ${fmtMoney(s.exchange_usdt)} ${s.quote}` : "";
-    html = `${icon("alert")}<span><b>MODO REAL</b> <span class="sep">·</span> DINHEIRO REAL <span class="sep">·</span> capital máximo ${fmtMoney(s.capital_limit, 0)} ${s.quote}${bal}${extra}</span>`;
+    html = `${icon("alert")}<span><b>${mk}MODO REAL</b> <span class="sep">·</span> DINHEIRO REAL na ${stocks ? "Trading 212" : "Binance"} <span class="sep">·</span> capital máximo ${fmtMoney(s.capital_limit, 0)} ${s.quote}${bal}${extra}</span>`;
   }
   if (banner.dataset.html !== html) { banner.dataset.html = html; banner.innerHTML = html; }
 
@@ -335,9 +364,33 @@ function renderStatus(s) {
 const REGIME_PT = { risk_on: "Mercado favorável", neutral: "Mercado misto", risk_off: "Mercado desfavorável" };
 const STANCE_PT = { aggressive: "ofensiva", normal: "normal", defensive: "defensiva" };
 
+function renderTrendCard(s) {
+  const box = $("#focusBox"), t = s.trend;
+  const key = JSON.stringify([t && t.time, s.running]);
+  if (box.dataset.key === key) return;
+  box.dataset.key = key;
+  $("#regimeBadge").innerHTML = "";
+  const intro = `<div class="focus-view">Estratégia de tendência: fica com os ${esc(String(Object.keys((t && t.targets) || {}).length || 3))} ETFs com melhor momentum (1, 3, 6 e 12 meses) que estão acima da média de 200 dias; o resto fica em "dinheiro" (XEON). Reequilibra ${t && t.due === false ? "no início de cada período" : "quando é devido"}, sem IA.</div>`;
+  if (!t || !t.scores) {
+    box.innerHTML = intro + `<div class="focus-foot">Ainda sem avaliação: inicia o bot ou clica em "Analisar agora" (com a bolsa aberta).</div>`;
+    return;
+  }
+  const targets = t.targets || {};
+  const rows = t.scores.map((r) => `<tr class="trend-row ${targets[r.symbol] ? "target" : ""}" data-go="${esc(r.symbol)}" style="cursor:pointer">
+      <td><b>${esc(r.symbol.replace(".DE", ""))}</b></td>
+      <td class="r ${cls(r.momentum)}">${fmtPct(r.momentum, 1)}</td>
+      <td class="r ${cls(r.dist_sma_pct)}">${fmtPct(r.dist_sma_pct, 1)}</td>
+      <td class="r">${targets[r.symbol] ? `<span class="w-tag">${Math.round(targets[r.symbol] * 100)}%</span>` : r.eligible ? '<span class="muted">elegível</span>' : '<span class="muted">—</span>'}</td></tr>`).join("");
+  box.innerHTML = intro + `<table class="trend-table"><thead><tr><th>ETF</th><th class="r">Momentum</th><th class="r">vs MM200</th><th class="r">Alvo</th></tr></thead><tbody>${rows}</tbody></table>`
+    + (t.notes && t.notes.length ? `<div class="focus-avoid">${esc(t.notes.join("; "))}</div>` : "")
+    + `<div class="focus-foot"><span class="ago">Avaliado ${timeAgo(t.time)}</span></div>`;
+  $$("[data-go]", box).forEach((el) => (el.onclick = () => selectSymbol(el.dataset.go)));
+}
+
 function renderFocus(s) {
+  if (s.market === "stocks" && s.strategy === "tendencia") return renderTrendCard(s);
   const f = s.focus, r = s.regime;
-  const key = JSON.stringify([f && f.time, r && r.state, s.auto_select, s.running]);
+  const key = JSON.stringify([f && f.time, r && r.state, s.auto_select, s.running, s.market]);
   const box = $("#focusBox");
   if (box.dataset.key === key) {
     const ago = $(".focus-foot .ago", box);
@@ -347,21 +400,21 @@ function renderFocus(s) {
   box.dataset.key = key;
   $("#regimeBadge").innerHTML = r ? `<span class="regime ${r.state}" title="${r.breadth_above_ema50_pct}% das moedas acima da média de 50 no timeframe maior">${REGIME_PT[r.state]}</span>` : "";
   const intro = s.auto_select
-    ? `Modo automático: em cada análise o bot examina as ${s.scanner.universe} moedas mais negociadas e escolhe sozinho as melhores ${s.scanner.top} para a IA analisar a fundo.`
+    ? `Modo automático: em cada análise o bot examina ${s.market === "stocks" ? "as ações e ETFs mais negociados com a bolsa aberta" : `as ${s.scanner.universe} moedas mais negociadas`} e escolhe sozinho os melhores ${s.scanner.top} para a IA analisar a fundo.`
     : "Modo manual: a IA analisa os teus pares fixos e as melhores do radar.";
   if (!f) {
     box.innerHTML = `<div class="focus-view">${esc(intro)}</div><div class="focus-foot">Ainda sem análise: inicia o bot ou clica em "Analisar agora".</div>`;
     return;
   }
   const metrics = r ? `<div class="focus-metrics"><span><b>${r.breadth_up_pct}%</b> das moedas a subir</span>
-      <span>BTC: <b>${TREND_PT[r.btc_trend] || "—"}</b></span><span>média 24h <b class="${cls(r.avg_change_24h_pct)}">${fmtPct(r.avg_change_24h_pct)}</b></span></div>` : "";
+      <span>${esc(r.benchmark || s.benchmark_label)}: <b>${TREND_PT[r.benchmark_trend || r.btc_trend] || "—"}</b></span><span>média 24h <b class="${cls(r.avg_change_24h_pct)}">${fmtPct(r.avg_change_24h_pct)}</b></span></div>` : "";
   const view = f.view ? `<div class="focus-view">${esc(f.view)}${f.stance ? ` <span class="muted">(postura ${STANCE_PT[f.stance] || f.stance})</span>` : ""}</div>` : "";
   const picks = f.picks.length
     ? f.picks.map((p, i) => `<div class="pick" data-go="${esc(p.symbol)}">
         <span class="n">${i + 1}</span>
         <div><div class="name">${esc(base(p.symbol))}${p.setup ? `<span>${esc(p.setup)}</span>` : ""}</div><div class="why">${esc(p.reason)}</div></div>
         <span class="sc">${p.score ?? ""}</span></div>`).join("")
-    : `<div class="empty" style="padding:10px"><b>Nenhuma oportunidade boa agora</b>O bot espera pela próxima análise sem gastar IA nas outras moedas.</div>`;
+    : `<div class="empty" style="padding:10px"><b>Nenhuma oportunidade boa agora</b>O bot espera pela próxima análise sem gastar IA.</div>`;
   const avoid = f.avoid && f.avoid.length
     ? `<div class="focus-avoid">Evitadas: ${f.avoid.map((a) => `<b>${esc(base(a.symbol))}</b> (${esc(a.reason)})`).join("; ")}</div>` : "";
   const src = f.source === "ia" ? "escolha da IA gestora" : f.source === "radar" ? "escolha pelo radar" : "pares fixos";
@@ -373,7 +426,9 @@ function renderCountdown() {
   const s = S.status;
   if (!s) return;
   const el = $("#kNext"), sub = $("#kNextSub");
-  sub.textContent = `a cada ${s.timeframe} · ${PROFILE_PT[s.profile] || s.profile}`;
+  sub.textContent = s.market === "stocks" && s.strategy === "tendencia" ? "tendência de ETFs · sem IA"
+    : `a cada ${s.timeframe} · ${PROFILE_PT[s.profile] || s.profile}`;
+  if (s.running && s.market === "stocks" && /Bolsas fechadas/.test(s.activity)) { el.innerHTML = `<span class="muted">bolsas fechadas</span>`; return; }
   if (!s.running) { el.innerHTML = `<span class="muted">parado</span>`; return; }
   if (isBusy(s.activity)) { el.innerHTML = `<span style="color:var(--accent)">a analisar…</span>`; return; }
   if (!s.next_decision_ms) { el.textContent = "—"; return; }
@@ -421,39 +476,49 @@ function renderPositions(s) {
   $("#posCount").textContent = `${s.positions.length}/${s.max_positions}`;
   $("#btnCloseAll").hidden = s.positions.length < 2;
   const host = $("#positions");
-  const key = s.positions.map((p) => `${p.symbol}|${p.stop}|${p.take_profit}`).join(",") + s.quote;
+  const key = s.positions.map((p) => `${p.symbol}|${p.stop}|${p.take_profit}|${p.partial_done}|${p.let_run}`).join(",") + s.quote;
   if (host.dataset.key !== key) {
     host.dataset.key = key;
     if (!s.positions.length) {
       host.innerHTML = `<div class="empty"><b>Sem posições abertas</b>O bot compra quando a IA encontra uma oportunidade que passa as regras de risco.</div>`;
       return;
     }
-    host.innerHTML = s.positions.map((p) => `<div class="position" data-sym="${esc(p.symbol)}">
+    host.innerHTML = s.positions.map((p) => {
+      const trendPos = p.setup === "tendencia" || !(p.stop > 0);
+      const badges = [p.partial_done ? '<span class="mini-badge good">metade vendida</span>' : "",
+                      p.let_run ? '<span class="mini-badge good">a deixar correr</span>' : "",
+                      p.rules_note ? `<span class="mini-badge">${esc(p.rules_note)}</span>` : ""].join("");
+      return `<div class="position" data-sym="${esc(p.symbol)}">
       <div class="position-top"><span class="position-sym">${esc(p.symbol)}</span><span class="position-pnl"></span></div>
       <div class="position-meta"><span class="pm-left"></span><span class="pm-r"></span></div>
+      ${trendPos ? `<div class="pos-note">Estratégia de tendência: mantém enquanto estiver entre os melhores e acima da média de 200 dias. Entrada ${fmtPrice(p.entry_price)}.</div>` : `
       <div class="range" title="Posição do preço entre o stop e o alvo">
         <div class="range-fill"></div><span class="range-mark" title="Entrada"></span><span class="range-cur" title="Preço atual"></span>
       </div>
-      <div class="range-labels"><span class="stop">Stop ${fmtPrice(p.stop)}</span><span>Entrada ${fmtPrice(p.entry_price)}</span><span class="tp">Alvo ${fmtPrice(p.take_profit)}</span></div>
+      <div class="range-labels"><span class="stop">Stop ${fmtPrice(p.stop)}</span><span>Entrada ${fmtPrice(p.entry_price)}</span><span class="tp">${p.take_profit ? `Alvo ${fmtPrice(p.take_profit)}` : "Sem alvo (a correr)"}</span></div>
+      ${badges ? `<div class="chip-row">${badges}</div>` : ""}`}
       <div class="position-actions"><span class="pm-age"></span>
         <button class="btn btn-sm btn-danger-ghost" data-close="${esc(p.symbol)}">Fechar</button></div>
-    </div>`).join("");
+    </div>`;
+    }).join("");
     $$("[data-close]", host).forEach((b) => (b.onclick = () => closePosition(b.dataset.close, b)));
   }
   for (const p of s.positions) {
     const el = host.querySelector(`.position[data-sym="${CSS.escape(p.symbol)}"]`);
     if (!el) continue;
-    const { e, c } = positionRange(p);
     const pnl = $(".position-pnl", el);
     pnl.className = `position-pnl ${cls(p.pnl)}`;
     pnl.innerHTML = `${fmtSigned(p.pnl)} ${s.quote}<small>${fmtPct(p.pnl_pct)}</small>`;
     $(".pm-left", el).textContent = `${fmtQty(p.qty)} ${base(p.symbol)} · ${fmtMoney(p.value)} ${s.quote}`;
     $(".pm-r", el).textContent = p.r != null ? fmtSigned(p.r) + "R" : "";
     const fill = $(".range-fill", el);
-    fill.className = `range-fill ${p.price >= p.entry_price ? "up" : "down"}`;
-    fill.style.left = `${Math.min(e, c)}%`; fill.style.width = `${Math.abs(c - e)}%`;
-    $(".range-mark", el).style.left = `${e}%`;
-    $(".range-cur", el).style.left = `${c}%`;
+    if (fill && p.stop > 0) {
+      const { e, c } = positionRange(p);
+      fill.className = `range-fill ${p.price >= p.entry_price ? "up" : "down"}`;
+      fill.style.left = `${Math.min(e, c)}%`; fill.style.width = `${Math.abs(c - e)}%`;
+      $(".range-mark", el).style.left = `${e}%`;
+      $(".range-cur", el).style.left = `${c}%`;
+    }
     $(".pm-age", el).textContent = `Aberta ${timeAgo(p.opened_at)}`;
   }
 }
@@ -526,12 +591,12 @@ async function refreshRadar() {
     const info = $("#radarInfo");
     if (!r.time) {
       info.textContent = "O radar corre em cada análise do bot. Clica em \"Atualizar radar\" para ver agora.";
-      $("#radarTable").innerHTML = `<div class="empty"><b>Radar ainda sem dados</b>Analisa tecnicamente as ${S.status?.scanner.universe || 25} moedas mais negociadas em ${Q()} e escolhe as melhores para a IA.</div>`;
+      $("#radarTable").innerHTML = `<div class="empty"><b>Radar ainda sem dados</b>${S.status?.market === "stocks" ? "Analisa as ações e ETFs com a bolsa aberta" : `Analisa as ${S.status?.scanner.universe || 25} moedas mais negociadas em ${Q()}`} e escolhe as melhores para a IA.</div>`;
       return;
     }
-    info.textContent = `${r.results.length} de ${r.universe} moedas · atualizado ${timeAgo(new Date(r.time * 1000).toISOString())} · as de pontuação mais alta vão à IA`;
+    info.textContent = `${r.results.length} de ${r.universe} ${S.status?.market === "stocks" ? "ativos (bolsa aberta)" : "moedas"} · atualizado ${timeAgo(new Date(r.time * 1000).toISOString())} · as de pontuação mais alta vão à IA`;
     $("#radarTable").innerHTML = `<table><thead><tr><th>#</th><th>Moeda</th><th></th><th>Pontuação</th><th>Setup detetado</th><th>Tendência maior</th>
-      <th class="r">Preço</th><th class="r">24h</th><th class="r">vs BTC</th><th class="r">Volume 24h</th></tr></thead><tbody>` +
+      <th class="r">Preço</th><th class="r">24h</th><th class="r">vs ${esc(S.status?.benchmark_label || "BTC")}</th><th class="r">Volume</th></tr></thead><tbody>` +
       r.results.map((x, i) => `<tr class="clickable ${x.picked ? "picked" : ""}" data-sym="${esc(x.symbol)}" title="${esc(x.pick_reason || "")}">
         <td class="muted">${i + 1}</td><td><b>${esc(base(x.symbol))}</b></td>
         <td>${x.picked ? `<span class="pick-tag">${icon("check")}Escolhida</span>` : ""}</td>
@@ -555,7 +620,7 @@ async function scanNow() {
 
 async function refreshNews() {
   if (!$("#newsList").children.length) {
-    $("#newsList").innerHTML = `<div class="empty"><span class="spinner" style="display:inline-block;margin-bottom:6px"></span><br>A recolher notícias de ${13} sites…</div>`;
+    $("#newsList").innerHTML = `<div class="empty"><span class="spinner" style="display:inline-block;margin-bottom:6px"></span><br>A recolher notícias…</div>`;
   }
   try {
     const n = await api("/api/news");
@@ -564,12 +629,12 @@ async function refreshNews() {
         <span class="age">${h.age_h < 1 ? Math.round(h.age_h * 60) + " min" : nf(0).format(h.age_h) + " h"}</span>
         <span><div class="title">${esc(h.title)}</div><div class="src">${esc(h.source)}</div></span></a>`).join("")
       : `<div class="empty">Sem manchetes (verifica a ligação à internet).</div>`;
-    const g = n.global;
-    $("#globalBox").innerHTML = g ? `
+    const g = n.global, v = n.vix;
+    $("#globalBox").innerHTML = (v ? `<div>VIX (medo das bolsas)<b>${nf(1).format(v.vix)} · ${esc(v.label)}</b></div><div>VIX 5 dias<b class="${cls(-v.vix_5d_change_pct)}">${fmtPct(v.vix_5d_change_pct, 1)}</b></div>` : "") + (g ? `
       <div>Capitalização total<b>${nf(0).format(g.total_market_cap_usd_bn)} mil M$</b></div>
       <div>Variação 24h<b class="${cls(g.market_cap_change_24h_pct)}">${fmtPct(g.market_cap_change_24h_pct)}</b></div>
       <div>Dominância BTC<b>${nf(1).format(g.btc_dominance_pct)}%</b></div>
-      <div>Dominância ETH<b>${nf(1).format(g.eth_dominance_pct)}%</b></div>` : `<div>Indisponível</div>`;
+      <div>Dominância ETH<b>${nf(1).format(g.eth_dominance_pct)}%</b></div>` : `<div>Indisponível</div>`);
     $("#eventsList").innerHTML = n.events.length ? n.events.map((e) => `
       <div class="event"><span class="when">${new Date(e.time_utc.replace(" ", "T") + ":00Z").toLocaleString("pt-PT", { weekday: "short", hour: "2-digit", minute: "2-digit" })}</span>
         <span><span class="imp-${e.impact}">${e.country}</span> ${esc(e.event)}${e.forecast ? ` <span class="muted">(prev. ${esc(e.forecast)})</span>` : ""}</span></div>`).join("")
@@ -704,11 +769,11 @@ async function startStop() {
   } else {
     if (s.mode === "live") {
       const ok = await confirmDialog({
-        title: s.mode_key === "testnet" ? "Iniciar na Testnet?" : "Iniciar com dinheiro real?",
-        text: s.mode_key === "testnet"
-          ? `O bot vai enviar ordens para a Binance Testnet (dinheiro fictício), usando até <b>${fmtMoney(s.capital_limit, 0)} ${s.quote}</b>.`
-          : `O bot vai comprar e vender na tua conta Binance com até <b>${fmtMoney(s.capital_limit, 0)} ${s.quote}</b> de dinheiro real.`,
-        ok: "Iniciar", danger: s.mode_key === "live",
+        title: /testnet|demo/.test(s.mode_key) ? "Iniciar na conta demo?" : "Iniciar com dinheiro real?",
+        text: /testnet|demo/.test(s.mode_key)
+          ? `O bot vai enviar ordens para a ${s.market === "stocks" ? "conta demo da Trading 212" : "Binance Testnet"} (dinheiro fictício), usando até <b>${fmtMoney(s.capital_limit, 0)} ${s.quote}</b>.`
+          : `O bot vai comprar e vender na tua conta ${s.market === "stocks" ? "Trading 212" : "Binance"} com até <b>${fmtMoney(s.capital_limit, 0)} ${s.quote}</b> de dinheiro real.`,
+        ok: "Iniciar", danger: /live/.test(s.mode_key),
       });
       if (!ok) return;
     }
@@ -767,6 +832,24 @@ async function resumeTrading() {
   refreshStatus();
 }
 
+/* ============================================================ mercados */
+async function onMarketClick(market) {
+  const s = S.status;
+  if (!s || market === s.market) return;
+  if (s.running) {
+    const ok = await confirmDialog({ title: `Mudar para ${market === "stocks" ? "Ações & ETFs" : "Cripto"}?`,
+      text: "O bot vai ser parado. Cada mercado tem a sua carteira e histórico; o novo mercado começa em Modo Teste.", ok: "Parar e mudar" });
+    if (!ok) return;
+  }
+  try {
+    await api("/api/market", { method: "POST", body: { market } });
+    toast(market === "stocks" ? "Mercado: Ações & ETFs (Modo Teste)." : "Mercado: Cripto (Modo Teste).", "ok");
+  } catch (e) { toast(e.message, "err"); return; }
+  S.symbol = null; S.lastDecisionSig = "";
+  ["#focusBox", "#aiList", "#positions", "#pendingList", "#symbolTabs"].forEach((id) => { $(id).dataset.key = "-"; $(id).dataset.sig = "-"; });
+  await refreshStatus(); refreshCandles(true); setTab(S.tab);
+}
+
 /* ============================================================ modos */
 async function onModeClick(mode) {
   const s = S.status;
@@ -785,9 +868,23 @@ async function onModeClick(mode) {
   openLiveModal();
 }
 
+function liveBrokerTexts() {
+  const stocks = S.status.market === "stocks";
+  $("#liveSubtitle").textContent = stocks ? "O bot vai comprar e vender ações e ETFs com o teu dinheiro na Trading 212." : "O bot vai comprar e vender com o teu dinheiro na Binance.";
+  $("#liveKeysTitle").textContent = stocks ? "Chaves API da Trading 212" : "Chaves API da Binance";
+  $("#liveSecretLabel").textContent = stocks ? "API Secret" : "Secret Key";
+  $("#liveKeysHelp").innerHTML = stocks
+    ? `Na app Trading 212: Definições › API (Beta) › Gerar chave, com permissão para <b>ver a conta</b> e <b>colocar ordens</b>. Só funciona em contas <b>Invest</b>. A conta tem de estar em <b>${esc(S.status.quote)}</b>.`
+    : `Cria as chaves em Binance › Gestão de API. Ativa só <b>Leitura</b> e <b>Trading spot</b>. <b>Nunca</b> ativas levantamentos. O bot negoceia em <b>${esc(S.status.quote)}</b> (na UE a Binance não permite USDT).`;
+  $("#liveTestnetLabel").innerHTML = stocks
+    ? "<b>Usar a conta demo da Trading 212</b>: ordens a sério com dinheiro fictício, para testar primeiro (gera a chave com a conta demo selecionada na app)."
+    : "<b>Usar a Binance Testnet</b>: ordens reais com dinheiro fictício, para testar primeiro. As chaves são criadas em testnet.binance.vision.";
+}
+
 function openLiveModal() {
   const s = S.status;
   S.liveCheck = null;
+  liveBrokerTexts();
   $("#liveTestnet").checked = !!s.use_testnet;
   $("#liveCapital").value = Math.round(s.capital_limit);
   $("#liveApiKey").value = ""; $("#liveApiSecret").value = "";
@@ -799,7 +896,11 @@ function openLiveModal() {
   if (savedKeyFor($("#liveTestnet").checked)) verifyLive(true);
 }
 
-function savedKeyFor(testnet) { return testnet ? S.status.keys.testnet : S.status.keys.binance; }
+function savedKeyFor(testnet) {
+  const k = S.status.keys;
+  if (S.status.market === "stocks") return testnet ? k.t212_demo : k.t212;
+  return testnet ? k.testnet : k.binance;
+}
 
 function updateLiveKeyView() {
   const saved = savedKeyFor($("#liveTestnet").checked);
@@ -824,13 +925,13 @@ async function verifyLive(silent = false) {
   const btn = $("#btnLiveVerify");
   $("#liveChecks").innerHTML = `<div class="check-item muted"><span class="spinner"></span>A verificar ligação à Binance…</div>`;
   try {
-    const r = await withBusy(btn, () => api("/api/keys/binance", { method: "POST", body }));
+    const r = await withBusy(btn, () => api(S.status.market === "stocks" ? "/api/keys/t212" : "/api/keys/binance", { method: "POST", body }));
     S.liveCheck = r;
     const items = [];
     if (r.usdt_free != null) {
-      items.push(["ok", `Ligação OK${r.testnet ? " (Testnet)" : ""}`]);
+      items.push(["ok", `Ligação OK${r.testnet ? " (demo)" : ""}${r.account_currency ? ` · conta em ${r.account_currency}` : ""}`]);
       items.push(["ok", `Saldo livre: ${fmtMoney(r.usdt_free)} ${r.quote || Q()}`]);
-      if (!r.testnet) {
+      if (!r.testnet && S.status.market !== "stocks") {
         items.push([r.withdrawals_enabled ? "bad" : "ok", r.withdrawals_enabled ? "Levantamentos ATIVADOS nesta chave" : "Levantamentos desativados"]);
         items.push([r.spot_trading_enabled ? "ok" : "bad", r.spot_trading_enabled ? "Trading spot ativo" : "Trading spot desativado"]);
       }
@@ -858,7 +959,7 @@ function validateLive() {
   $("#liveHint").textContent = hint;
   const btn = $("#btnLiveActivate");
   btn.disabled = !!hint;
-  btn.textContent = testnet ? "Ativar Modo Real (Testnet)" : "Ativar Modo Real";
+  btn.textContent = testnet ? "Ativar Modo Real (demo)" : "Ativar Modo Real";
 }
 
 async function activateLive() {
@@ -869,7 +970,7 @@ async function activateLive() {
   try {
     await withBusy($("#btnLiveActivate"), () => api("/api/mode", { method: "POST", body }));
     $("#liveModal").hidden = true;
-    toast(body.testnet ? "Modo Real (Testnet) ativo. Clica em Iniciar bot quando quiseres." : "Modo Real ativo. Clica em Iniciar bot quando quiseres.", "ok", 7000);
+    toast(body.testnet ? "Modo Real (demo) ativo. Clica em Iniciar bot quando quiseres." : "Modo Real ativo. Clica em Iniciar bot quando quiseres.", "ok", 7000);
     S.symbol = null; S.lastDecisionSig = "";
     await refreshStatus(); refreshCandles(true); setTab(S.tab);
   } catch (e) { toast(e.message, "err", 9000); }
@@ -883,19 +984,33 @@ const PROFILE_INFO = {
 };
 
 const SETTINGS_LAYOUT = [
-  { title: "Escolha das moedas", fields: [
+  { title: "Escolha das moedas", showIf: (d) => !(S.settings.market === "stocks" && d.STOCK_STRATEGY === "tendencia"), fields: [
     { key: "AUTO_SELECT", type: "toggle", label: "Escolha automática (recomendado)",
       help: "Em cada análise o bot examina as moedas mais negociadas, a IA gestora escolhe as melhores para aquele momento e a lista vai mudando sozinha." },
     { key: "SCAN_UNIVERSE", type: "num", label: "Moedas examinadas", step: 5 },
     { key: "SCAN_TOP", type: "num", label: "Moedas analisadas a fundo por ciclo", step: 1, profile: true },
     { key: "SCAN_MIN_SCORE", type: "num", label: "Pontuação técnica mínima (0-100)", step: 5 },
   ] },
+  { title: "Ações e ETFs", showIf: () => S.settings.market === "stocks", fields: [
+    { key: "STOCK_STRATEGY", type: "seg", label: "Estratégia", options: [["ativo", "IA ativa (trading)"], ["tendencia", "Tendência de ETFs (longo prazo)"]],
+      help: "IA ativa: como em cripto (radar, IA, ordens pendentes). Tendência: rotação de ETFs por momentum com filtro da média de 200 dias; sem IA, poucos trades, a abordagem com mais evidência histórica." },
+    { key: "STOCK_CURRENCY", type: "seg", label: "Moeda da conta", options: [["EUR", "EUR"], ["USD", "USD"]], help: "Tem de ser igual à moeda principal da tua conta Trading 212." },
+    { key: "TREND_TOP_N", type: "num", label: "ETFs em carteira", step: 1, showIf: (d) => d.STOCK_STRATEGY === "tendencia" },
+    { key: "TREND_REBALANCE", type: "seg", label: "Reequilíbrio", options: [["monthly", "Mensal"], ["weekly", "Semanal"]], showIf: (d) => d.STOCK_STRATEGY === "tendencia" },
+    { key: "EARNINGS_BLACKOUT_DAYS", type: "num", label: "Sem entradas antes dos resultados", unit: "dias", step: 1, showIf: (d) => d.STOCK_STRATEGY !== "tendencia" },
+    { key: "EXIT_BEFORE_EARNINGS", type: "toggle", label: "Fechar posições antes dos resultados", showIf: (d) => d.STOCK_STRATEGY !== "tendencia",
+      help: "Os resultados trimestrais podem fazer o preço saltar 10% durante a noite, por cima de qualquer stop." },
+    { key: "STOCK_UNIVERSE", type: "textarea", label: "Ações e ETFs que o radar examina", showIf: (d) => d.STOCK_STRATEGY !== "tendencia",
+      help: "Tickers do Yahoo Finance separados por vírgulas. Ações americanas (AAPL) e ETFs UCITS europeus (SXR8.DE). ETFs americanos como SPY não são permitidos a particulares na UE." },
+    { key: "STOCK_ASSETS", type: "chips-stocks", label: "Ativos fixos", showIf: (d) => !d.AUTO_SELECT && d.STOCK_STRATEGY !== "tendencia" },
+  ] },
   { title: "Mercado", fields: [
-    { key: "QUOTE", type: "seg", label: "Moeda de negociação", options: [["USDC", "USDC"], ["EUR", "EUR"], ["USDT", "USDT"]],
+    { key: "QUOTE", type: "seg", label: "Moeda de negociação", showIf: () => S.settings.market !== "stocks", options: [["USDC", "USDC"], ["EUR", "EUR"], ["USDT", "USDT"]],
       help: "Na União Europeia a Binance não permite USDT: usa USDC (≈ 1 dólar, muitos pares) ou EUR (poucos pares)." },
-    { key: "ASSETS", type: "chips", label: "Pares fixos (sempre acompanhados)", showIf: (d) => !d.AUTO_SELECT,
+    { key: "ASSETS", type: "chips", label: "Pares fixos (sempre acompanhados)", showIf: (d) => !d.AUTO_SELECT && S.settings.market !== "stocks",
       help: "Até 8. O radar junta as melhores oportunidades das outras moedas." },
     { key: "PRIMARY_TIMEFRAME", type: "seg", label: "Frequência de análise", profile: true, options: [["15m", "15 min"], ["1h", "1 hora"], ["4h", "4 horas"]],
+      stocksOptions: [["15m", "15 min"], ["1h", "1 hora"]],
       help: "A IA analisa no fecho de cada vela. Mais frequente = mais oportunidades e mais custo." },
   ] },
   { title: "Radar (modo manual)", showIf: (d) => !d.AUTO_SELECT, fields: [
@@ -925,6 +1040,14 @@ const SETTINGS_LAYOUT = [
     { key: "MAX_DAILY_LOSS_PCT", type: "num", label: "Perda diária máxima", unit: "%", step: 0.5, help: "Ao atingir, o bot não abre mais posições nesse dia." },
     { key: "MAX_DRAWDOWN_PCT", type: "num", label: "Queda máxima desde o pico", unit: "%", step: 1, help: "Ao atingir, o bot bloqueia compras até desbloqueares." },
     { key: "COOLDOWN_AFTER_LOSS_MINUTES", type: "num", label: "Pausa num par após perda", unit: "min", step: 30 },
+  ] },
+  { title: "Técnicas dinâmicas de saída e entrada", fields: [
+    { key: "PARTIAL_TP_R", type: "num", label: "Vender parte ao ganhar", unit: "R", step: 0.25, help: "R = valor arriscado. Ao ganhar isto, vende uma parte e põe o stop no preço de entrada." },
+    { key: "PARTIAL_TP_PCT", type: "num", label: "Parte a vender", unit: "%", step: 10, help: "0 desliga a venda parcial." },
+    { key: "TIME_STOP_CANDLES", type: "num", label: "Fechar trades parados ao fim de", unit: "velas", step: 4, help: "Liberta capital de trades que não andam (0 desliga)." },
+    { key: "LOSS_STREAK_REDUCE", type: "num", label: "Reduzir risco após perdas seguidas", step: 1, help: "Depois de N perdas seguidas arrisca metade até voltar a ganhar (0 desliga)." },
+    { key: "EVENT_BLACKOUT_BEFORE_MIN", type: "num", label: "Pausa antes de eventos macro", unit: "min", step: 15, help: "Sem novas entradas perto de anúncios da Fed, inflação, emprego..." },
+    { key: "EVENT_BLACKOUT_AFTER_MIN", type: "num", label: "Pausa depois de eventos macro", unit: "min", step: 15 },
   ] },
   { title: "Proteção de lucros", fields: [
     { key: "BREAKEVEN_AT_R", type: "num", label: "Stop para a entrada ao ganhar", unit: "R", step: 0.25, help: "R = valor arriscado. 1R = quando o lucro iguala o risco. 0 desliga." },
@@ -958,6 +1081,7 @@ function closeSettings() {
 function renderSettings() { S.draft = JSON.parse(JSON.stringify(S.settings.values)); paintSettings(); }
 
 function estimateText(d) {
+  if (S.settings.market === "stocks" && d.STOCK_STRATEGY === "tendencia") return "Estratégia de tendência: não usa IA (custo zero em OpenAI). Poucos trades por mês.";
   const tfMin = { "15m": 15, "1h": 60, "4h": 240 }[d.PRIMARY_TIMEFRAME] || 60;
   const perCycle = d.AUTO_SELECT ? Number(d.SCAN_TOP) + 1 : d.ASSETS.length + (d.SCANNER_ENABLED ? Number(d.SCAN_TOP) : 0);
   const perHour = (perCycle * 60 / tfMin) * Number(d.DECISION_VOTES || 1);
@@ -977,9 +1101,18 @@ function paintSettings() {
       return `<div class="field"><span class="field-label">${f.label}</span><div class="chips" data-key="${f.key}">` +
         o.assets.map((a) => `<button class="chip ${val.includes(a) ? "on" : ""}" data-asset="${a}">${a}</button>`).join("") + `</div>${help}</div>`;
     }
+    if (f.type === "textarea") {
+      return `<div class="field"><label class="field-label" for="f-${f.key}">${f.label}</label>
+        <textarea class="input" id="f-${f.key}" data-key="${f.key}" data-list="1" spellcheck="false">${esc((val || []).join(", "))}</textarea>${help}</div>`;
+    }
+    if (f.type === "chips-stocks") {
+      return `<div class="field"><span class="field-label">${f.label}</span><div class="chips" data-key="${f.key}">` +
+        (draft.STOCK_UNIVERSE || []).map((a) => `<button class="chip ${val.includes(a) ? "on" : ""}" data-asset="${a}">${a}</button>`).join("") + `</div>${help}</div>`;
+    }
     if (f.type === "seg") {
+      const opts = S.settings.market === "stocks" && f.stocksOptions ? f.stocksOptions : f.options;
       return `<div class="field"><span class="field-label">${f.label}</span><div class="seg" data-key="${f.key}" data-profile="${f.profile ? 1 : 0}">` +
-        f.options.map(([ov, ol]) => `<button data-val="${ov}" class="${String(val) === String(ov) ? "active" : ""}">${ol}</button>`).join("") + `</div>${help}</div>`;
+        opts.map(([ov, ol]) => `<button data-val="${ov}" class="${String(val) === String(ov) ? "active" : ""}">${ol}</button>`).join("") + `</div>${help}</div>`;
     }
     if (f.type === "select") {
       return `<div class="field"><label for="f-${f.key}">${f.label}</label><select class="input" id="f-${f.key}" data-key="${f.key}">` +
@@ -1016,7 +1149,7 @@ function paintSettings() {
       <div class="danger-zone">
         <div class="field-inline" style="margin:0"><div class="field-text"><span class="field-label">Recomeçar o Modo Teste</span>
           <div class="help">Apaga posições e histórico do Modo Teste e recomeça com o saldo inicial definido acima.</div></div>
-          <button class="btn btn-sm btn-danger-ghost" id="btnResetTest" ${s.mode_key !== "paper" ? "disabled title='Só no Modo Teste'" : ""}>Recomeçar</button></div>
+          <button class="btn btn-sm btn-danger-ghost" id="btnResetTest" ${s.mode !== "paper" ? "disabled title='Só no Modo Teste'" : ""}>Recomeçar</button></div>
       </div>
     </div>`;
 
@@ -1031,8 +1164,12 @@ function paintSettings() {
     Object.assign(draft, S.settings.options.profiles[name], { PROFILE: name });
     paintSettings(); markDirty();
   }));
+  $$("textarea[data-list]", body).forEach((el) => (el.oninput = () => {
+    draft[el.dataset.key] = el.value.split(/[\s,;]+/).map((x) => x.trim().toUpperCase()).filter(Boolean);
+    markDirty();
+  }));
   $$(".chips .chip", body).forEach((c) => (c.onclick = () => {
-    const list = draft.ASSETS;
+    const list = draft[c.parentElement.dataset.key];
     const i = list.indexOf(c.dataset.asset);
     if (i >= 0) list.splice(i, 1); else if (list.length < 8) list.push(c.dataset.asset);
     c.classList.toggle("on", list.includes(c.dataset.asset));
@@ -1042,7 +1179,7 @@ function paintSettings() {
     $$("button", seg).forEach((x) => x.classList.toggle("active", x === b));
     const raw = b.dataset.val;
     draft[seg.dataset.key] = isNaN(Number(raw)) ? raw : Number(raw);
-    if (seg.dataset.key === "RISK_MODE" || seg.dataset.key === "QUOTE") { paintSettings(); markDirty(); return; }
+    if (["RISK_MODE", "QUOTE", "STOCK_STRATEGY"].includes(seg.dataset.key)) { paintSettings(); markDirty(); return; }
     touched(seg.dataset.profile === "1");
   })));
   $$("select[data-key]", body).forEach((el) => (el.onchange = () => { draft[el.dataset.key] = el.value; touched(false); }));
@@ -1099,7 +1236,8 @@ async function resetTest() {
 
 /* ============================================================ arranque */
 function bind() {
-  $$(".mode-btn").forEach((b) => (b.onclick = () => onModeClick(b.dataset.mode)));
+  $$(".mode-btn[data-mode]").forEach((b) => (b.onclick = () => onModeClick(b.dataset.mode)));
+  $$(".market-btn").forEach((b) => (b.onclick = () => onMarketClick(b.dataset.market)));
   $("#btnStartStop").onclick = startStop;
   $("#btnAnalyze").onclick = analyzeNow;
   $("#btnCloseAll").onclick = closeAll;
@@ -1111,12 +1249,7 @@ function bind() {
   $("#btnSaveSettings").onclick = saveSettings;
   $$(".tab").forEach((t) => (t.onclick = () => setTab(t.dataset.tab)));
 
-  $("#tfTabs").innerHTML = ["15m", "1h", "4h", "1d"].map((tf) => `<button data-tf="${tf}">${tf}</button>`).join("");
-  $$("#tfTabs button").forEach((b) => (b.onclick = () => {
-    S.tf = b.dataset.tf;
-    $$("#tfTabs button").forEach((x) => x.classList.toggle("active", x === b));
-    refreshCandles(true);
-  }));
+
 
   $$("[data-close-modal]").forEach((b) => (b.onclick = () => ($("#liveModal").hidden = true)));
   $("#liveTestnet").onchange = () => { S.liveCheck = null; $("#liveChecks").innerHTML = ""; updateLiveKeyView(); validateLive(); if (savedKeyFor($("#liveTestnet").checked)) verifyLive(true); };
@@ -1139,7 +1272,7 @@ async function main() {
   initCharts();
   await refreshStatus();
   S.tf = S.status?.timeframe || "1h";
-  $$("#tfTabs button").forEach((x) => x.classList.toggle("active", x.dataset.tf === S.tf));
+  if (S.status) { $("#tfTabs").dataset.sig = ""; renderTfTabs(S.status); }
   refreshCandles(true);
   setTab("decisions");
 

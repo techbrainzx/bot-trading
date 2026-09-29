@@ -121,6 +121,8 @@ def run_backtest(symbol: str, days: int, step: int, model: str, effort: str, vot
         o_, h_, l_ = float(bar["open"]), float(bar["high"]), float(bar["low"])
         trader.check_exit(symbol, o_, h_, l_, now)
         trader.check_pending(symbol, o_, h_, l_, now, {symbol: price})
+        if symbol in trader.positions:
+            trader.manage_rules(symbol, slicers[p_tf](close_ms).tail(150), now)
         prices = {symbol: price}
         trader.update_risk_state(trader.equity(prices), now)
 

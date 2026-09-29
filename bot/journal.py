@@ -23,8 +23,9 @@ def setup_logging(logs_dir: Path, level=logging.INFO):
     fh = RotatingFileHandler(logs_dir / "bot.log", maxBytes=5_000_000, backupCount=5, encoding="utf-8")
     fh.setFormatter(fmt)
     root.addHandler(fh)
-    for noisy in ("httpx", "httpx2", "httpcore", "httpcore2", "openai", "urllib3", "ccxt"):
+    for noisy in ("httpx", "httpx2", "httpcore", "httpcore2", "openai", "urllib3", "ccxt", "yfinance", "peewee"):
         logging.getLogger(noisy).setLevel(logging.WARNING)
+    logging.getLogger("yfinance").setLevel(logging.CRITICAL)
 
 
 class Journal:

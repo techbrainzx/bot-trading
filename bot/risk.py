@@ -35,8 +35,9 @@ class RiskManager:
         return None
 
     def plan_entry(self, d, price: float, atr: float, equity: float, cash: float, spread_pct: float | None,
-                   min_order: float | None = None):
-        """Devolve (EntryPlan, nota) ou (None, motivo da rejeição). `price` é o preço de entrada."""
+                   min_order: float | None = None, fx: float = 1.0, risk_mult: float = 1.0):
+        """Devolve (EntryPlan, nota) ou (None, motivo da rejeição). `price` é o preço de entrada.
+        `fx` converte a moeda do instrumento para a moeda da conta (1 em cripto)."""
         notes = []
         min_order = max(config.MIN_ORDER_VALUE, min_order or 0)
         if d.confidence < config.MIN_CONFIDENCE:
@@ -74,20 +75,21 @@ class RiskManager:
                 span = max(0.80 - config.MIN_CONFIDENCE, 1e-9)
                 risk_pct *= 0.5 + 0.5 * min(1.0, max(0.0, (d.confidence - config.MIN_CONFIDENCE) / span))
             risk_amount = equity * risk_pct / 100
-        qty = risk_amount / (risk_unit + cost)
+        risk_amount *= risk_mult
+        qty = risk_amount / ((risk_unit + cost) * fx)
         max_notional = min(equity * config.MAX_POSITION_PCT / 100, cash * 0.98)
-        if qty * price > max_notional:
-            qty = max_notional / price
+        if qty * price * fx > max_notional:
+            qty = max_notional / (price * fx)
             notes.append("tamanho limitado pelo máximo por posição/saldo")
-        notional = qty * price
+        notional = qty * price * fx
         if notional < min_order:
             # sobe até ao mínimo da exchange se o risco não passar de 2x o pretendido e houver saldo
-            needed_risk = min_order / price * (risk_unit + cost)
+            needed_risk = min_order / (price * fx) * (risk_unit + cost) * fx
             if needed_risk <= 2 * risk_amount and min_order <= cash * 0.98:
-                qty, notional = min_order / price, min_order
-                notes.append(f"ordem subida ao mínimo de {min_order:.2f} {config.QUOTE}")
+                qty, notional = min_order / (price * fx), min_order
+                notes.append(f"ordem subida ao mínimo de {min_order:.2f}")
             else:
-                return None, f"ordem de {notional:.2f} {config.QUOTE} abaixo do mínimo de {min_order:.2f}"
+                return None, f"ordem de {notional:.2f} abaixo do mínimo de {min_order:.2f}"
         return EntryPlan(qty, price, stop, tp, round(rr, 2), notional), "; ".join(notes)
 
     def check_pending(self, d, price: float, atr: float) -> str | None:
@@ -136,8 +138,9 @@ def update_trailing(pos: dict, high: float) -> bool:
         breakeven = entry * (1 + 2 * (config.FEE_PCT + config.SLIPPAGE_PCT) / 100)
         if breakeven < pos["highest"]:
             new = max(new, breakeven)
-    if config.TRAIL_ATR_MULT and pos["highest"] >= entry + config.TRAIL_START_R * r:
-        new = max(new, pos["highest"] - config.TRAIL_ATR_MULT * pos["atr_at_entry"])
+    mult = pos.get("trail_mult", config.TRAIL_ATR_MULT)
+    if mult and pos["highest"] >= entry + config.TRAIL_START_R * r:
+        new = max(new, pos["highest"] - mult * pos["atr_at_entry"])
     if new > pos["stop"]:
         pos["stop"] = new
         return True

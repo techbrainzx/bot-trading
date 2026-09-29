@@ -16,21 +16,54 @@ Abre uma janela própria. Para abrir no browser em vez disso: `python app.py --b
 
 Na primeira vez numa máquina nova: `pip install -r requirements.txt`.
 
-## Os dois modos
+## Mercados e modos
 
-| | Modo Teste | Modo Real |
+No topo escolhes o **mercado** (Cripto ou Ações & ETFs) e o **modo** (Teste ou Real). Cada combinação tem a sua carteira e o seu histórico.
+
+| | Cripto | Ações & ETFs |
 |---|---|---|
-| Dinheiro | fictício (10 000 USDT por defeito) | **real**, na tua conta Binance |
-| Preços | reais, em tempo real | reais |
-| Ordens | simuladas, nada é enviado à Binance | enviadas à Binance |
-| Carteira e histórico | próprios | próprios (separados do Teste) |
+| Corretora (Modo Real) | Binance (USDC; a UE não permite USDT) | Trading 212 (conta Invest, em EUR) |
+| Conta de teste da corretora | Binance Testnet | Conta demo da Trading 212 |
+| Dados | Binance | Yahoo Finance (grátis) |
+| Horário | 24/7 | Só com a bolsa aberta (Nova Iorque 14:30-21:00, Xetra 08:00-16:30, hora de Lisboa) |
+| O que negoceia | ~40 criptomoedas mais líquidas | ~32 ações americanas + ETFs europeus UCITS (os ETFs americanos como SPY/QQQ não são permitidos a particulares na UE) |
 
-**Ativar o Modo Real**: clica em "Modo Real" e segue os 3 passos.
-1. Chaves da API da Binance. A aplicação verifica a ligação, o saldo e as permissões, e **recusa chaves com levantamentos ativados**. Há também a opção *Testnet* para testar ordens reais com dinheiro fictício.
-2. Capital máximo que o bot pode usar. Nunca usa mais do que isto.
-3. Confirmação: aceitar os riscos e escrever `REAL`.
+**Ativar o Modo Real**: clica em "Modo Real" e segue os 3 passos:
+1. Chaves da corretora:
+   - **Binance:** a aplicação recusa chaves com levantamentos ativados;
+   - **Trading 212:** gera a chave na app (Definições › API) com permissão para colocar ordens.
+2. Capital máximo que o bot pode usar.
+3. Confirmação escrita "REAL".
 
-Ao iniciar o bot no Modo Real é pedida mais uma confirmação.
+Recomendo começar com a opção de conta demo.
+
+## Ações & ETFs: duas estratégias
+
+1. **IA ativa (trading):** o mesmo sistema de cripto (radar, IA gestora, análise a fundo e ordens pendentes), com regras próprias da bolsa:
+   - não entra nos 2 dias antes dos **resultados trimestrais** e fecha posições na véspera, porque o preço pode saltar durante a noite por cima de qualquer stop;
+   - usa o **VIX** como medidor de medo das bolsas;
+   - considera fundamentais (P/E, alvo dos analistas, short interest) e notícias de 11 fontes financeiras e de cada empresa;
+   - só negoceia com a bolsa aberta e deteta feriados.
+2. **Tendência de ETFs (longo prazo, sem IA):** a abordagem com mais evidência académica:
+   - compra os 3 ETFs com melhor momentum a 1, 3, 6 e 12 meses (Moskowitz, Ooi & Pedersen, 2012), só se estiverem acima da média de 200 dias (Faber, 2007);
+   - o resto fica num ETF de "dinheiro" (XEON);
+   - reequilibra 1 vez por mês e vende logo um ETF que perca a média de 200 dias;
+   - custo de IA zero e poucos trades.
+
+## Técnicas dinâmicas de compra e venda (os dois mercados)
+
+- **Venda parcial:** ao ganhar 1R vende metade e põe o stop no preço de entrada (o trade já não pode dar prejuízo).
+- **Trailing stop adaptado ao regime:** mais largo em tendência forte (ADX ≥ 30) e mais apertado em mercado lateral.
+- **Stop estrutural:** sobe para baixo do último fundo mais alto.
+- **Deixar correr:** num rompimento forte, ao chegar ao alvo não vende tudo; retira o alvo e usa um trailing apertado.
+- **Stop por tempo:** fecha trades parados ao fim de 24 velas sem progresso.
+- **Risco dinâmico:**
+  - metade do risco depois de 3 perdas seguidas;
+  - menos risco em setups que andam a perder e mais nos que ganham;
+  - menos risco em mercado desfavorável.
+- **Pausa em eventos macro:** sem novas entradas 45 min antes e 30 min depois de anúncios da Fed, inflação, emprego, etc.
+
+Tudo isto é ajustável em Definições › Técnicas dinâmicas.
 
 ## O painel
 

@@ -13,8 +13,7 @@ import time
 from concurrent.futures import Future
 
 import config
-from .engine import MODE_LABELS, ConfigError, Engine, start_cash_for
-from .market import MarketData
+from .engine import MODE_LABELS, ConfigError, Engine, make_market_data, start_cash_for
 from .state import State
 
 log = logging.getLogger("bot")
@@ -22,7 +21,7 @@ log = logging.getLogger("bot")
 
 class Controller:
     def __init__(self):
-        self.md: MarketData | None = None
+        self.mds: dict = {}  # dados de mercado por mercado (cripto / ações)
         self.engine: Engine | None = None
         self.running = False
         self.error: str | None = None
@@ -84,10 +83,11 @@ class Controller:
         return self.running
 
     def _ensure_engine(self) -> Engine:
-        if self.md is None:
-            self.md = MarketData(config.EXCHANGE)
+        md = self.mds.get(config.MARKET)
+        if md is None:
+            md = self.mds[config.MARKET] = make_market_data(config.MARKET)
         if self.engine is None or self.engine.mode != config.mode_key():
-            self.engine = Engine(config.mode_key(), self.md)
+            self.engine = Engine(config.mode_key(), md)
             self.engine.on_activity = self._publish
         return self.engine
 
@@ -106,6 +106,7 @@ class Controller:
                 pass
         self.snapshot = {
             "mode": config.MODE,
+            "market": config.MARKET,
             "mode_key": key,
             "mode_label": MODE_LABELS.get(key, key),
             "running": self.running,
@@ -128,8 +129,11 @@ class Controller:
         self.running = True
         self.error = None
         eng = self.engine
-        coins = (f"escolha automática entre as {config.SCAN_UNIVERSE} mais negociadas" if config.AUTO_SELECT
-                 else ", ".join(config.SYMBOLS))
+        if eng.stocks and config.STOCK_STRATEGY == "tendencia":
+            coins = f"estratégia de tendência em {len(config.TREND_UNIVERSE)} ETFs"
+        else:
+            coins = (f"escolha automática entre os {config.SCAN_UNIVERSE} mais negociados" if config.AUTO_SELECT
+                     else ", ".join(config.SYMBOLS))
         log.info("Bot iniciado | %s | moedas: %s | timeframe %s | perfil %s | modelo %s", MODE_LABELS[eng.mode],
                  coins, config.PRIMARY_TIMEFRAME, config.PROFILE, config.DECISION_MODEL)
 
@@ -170,16 +174,27 @@ class Controller:
         log.info("Entradas desbloqueadas pelo utilizador (pico de capital reposto em %.2f).", eq)
 
     def cmd_reset_test(self, balance: float):
-        if config.mode_key() != "paper":
+        if config.MODE != "paper":
             raise ValueError("Só é possível recomeçar no Modo Teste.")
+        key = config.mode_key()
         self.running = False
         config.save({"PAPER_START_BALANCE": balance})
-        path = config.state_path("paper")
+        path = config.state_path(key)
         if path.exists():
             path.unlink()
-        if self.engine and self.engine.mode == "paper":
+        if self.engine and self.engine.mode == key:
             self.engine = None
         log.info("Modo Teste recomeçado com %.2f USDT fictícios.", balance)
+
+    def cmd_set_market(self, market: str):
+        """Troca entre cripto e ações. Cada mercado tem as suas carteiras; volta sempre ao Modo Teste."""
+        if market not in ("crypto", "stocks") or market == config.MARKET:
+            return
+        self.stop()
+        config.save({"MARKET": market, "MODE": "paper"})
+        self.engine = None
+        self.error = None
+        log.info("Mercado mudado para %s (Modo Teste).", "Ações e ETFs" if market == "stocks" else "Cripto")
 
     def cmd_set_mode(self, mode: str, testnet: bool = False, capital: float | None = None):
         prev = config.current()

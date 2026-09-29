@@ -17,11 +17,13 @@ from .risk import RiskManager
 from .scanner import Scanner
 from .selector import AISelector
 from .state import State
-from .trader import Trader, iso, performance, setup_score_adjust, trade_stats
+from .trader import Trader, dynamic_risk_multiplier, iso, performance, setup_score_adjust, trade_stats
 
 log = logging.getLogger("bot")
 
-MODE_LABELS = {"paper": "MODO TESTE", "testnet": "MODO REAL (TESTNET)", "live": "MODO REAL"}
+MODE_LABELS = {"paper": "MODO TESTE", "testnet": "MODO REAL (TESTNET)", "live": "MODO REAL",
+               "stocks_paper": "AÇÕES · MODO TESTE", "stocks_demo": "AÇÕES · MODO REAL (DEMO)",
+               "stocks_live": "AÇÕES · MODO REAL"}
 
 
 class ConfigError(Exception):
@@ -34,38 +36,61 @@ def check_ready(mode: str):
     if not config.OPENAI_API_KEY:
         raise ConfigError("Falta a chave da OpenAI (Definições > Chaves API).")
     key, secret = config.exchange_keys(mode)
-    if mode != "paper" and not (key and secret):
-        raise ConfigError("Faltam as chaves da Binance para o Modo Real.")
-    if mode == "live" and not config.LIVE_CONFIRMED:
+    if mode not in ("paper", "stocks_paper") and not (key and secret):
+        broker = "Trading 212" if mode.startswith("stocks") else "Binance"
+        raise ConfigError(f"Faltam as chaves da {broker} para o Modo Real.")
+    if mode in ("live", "stocks_live") and not config.LIVE_CONFIRMED:
         raise ConfigError("O Modo Real ainda não foi confirmado na interface.")
 
 
 def start_cash_for(mode: str) -> float:
-    return config.PAPER_START_BALANCE if mode == "paper" else config.LIVE_CAPITAL_USDT
+    return config.PAPER_START_BALANCE if mode in ("paper", "stocks_paper") else config.LIVE_CAPITAL_USDT
+
+
+def make_market_data(market: str | None = None):
+    if (market or config.MARKET) == "stocks":
+        from .stockdata import StockData
+        return StockData()
+    return MarketData(config.EXCHANGE)
 
 
 class Engine:
     def __init__(self, mode: str | None = None, md: MarketData | None = None):
         self.mode = mode or config.mode_key()
         check_ready(self.mode)
-        self.md = md or MarketData(config.EXCHANGE)
+        self.stocks = self.mode.startswith("stocks")
+        self.md = md or make_market_data("stocks" if self.stocks else "crypto")
         self.state = State(config.state_path(self.mode), start_cash_for(self.mode))
         self.client = OpenAI(api_key=config.OPENAI_API_KEY, max_retries=3, timeout=300)
         self.brain = TradingBrain(self.client, config.DECISION_MODEL, config.REASONING_EFFORT,
                                   config.DECISION_VOTES, on_usage=self._usage,
                                   fallback_model=config.DECISION_FALLBACK_MODEL)
         self.news = NewsHub(self.client if config.NEWS_ENABLED else None, config.NEWS_MODEL,
-                            config.NEWS_REFRESH_MINUTES, on_usage=self._usage)
+                            config.NEWS_REFRESH_MINUTES, on_usage=self._usage,
+                            market="stocks" if self.stocks else "crypto")
         self.scanner = Scanner(self.md, perf_adjust=lambda setup: setup_score_adjust(self.state.data["trades"], setup))
         self.selector = AISelector(self.client, config.SELECTOR_MODEL, on_usage=self._usage)
         if self.mode == "paper":
             broker = PaperBroker()
+        elif self.mode == "stocks_paper":
+            broker = PaperBroker(
+                fee_pct=lambda s: config.STOCK_FEE_PCT if self.md.currency(s) != config.STOCK_CURRENCY else 0.0,
+                fx=self.md.fx, min_order=config.STOCK_MIN_ORDER)
+        elif self.stocks:
+            from .t212 import Trading212Broker
+            key, secret = config.exchange_keys(self.mode)
+            broker = Trading212Broker(key, secret, demo=self.mode == "stocks_demo", md=self.md)
+            self._sync_capital()
         else:
             key, secret = config.exchange_keys(self.mode)
             broker = ExchangeBroker(config.EXCHANGE, key, secret, sandbox=self.mode == "testnet")
             self._sync_capital()
         self.journal = Journal(config.LOGS_DIR, prefix=f"{self.mode}_")
-        self.trader = Trader(self.state, broker, RiskManager(), self.journal)
+        self.trader = Trader(self.state, broker, RiskManager(), self.journal, currency=config.account_currency())
+        self.trader.fx = self.md.fx
+        self.trader.risk_mult = lambda symbol, setup: dynamic_risk_multiplier(
+            self.state.data["trades"], setup, ((self.state.data.get("focus") or {}).get("regime") or {}).get("state"))
+        self.trader.entry_gate = self.entry_gate
         self._btc_cache = (None, None)
         self._last_protect = 0.0
         self._last_equity_point = 0.0
@@ -108,7 +133,8 @@ class Engine:
                 raise ConfigError("O novo capital é menor do que o valor já investido em posições abertas.")
             for k in ("cash", "start_cash", "equity_peak", "day_start_equity"):
                 s[k] += delta
-            log.info("Capital do bot ajustado de %.2f para %.2f %s", old, config.LIVE_CAPITAL_USDT, config.QUOTE)
+            log.info("Capital do bot ajustado de %.2f para %.2f %s", old, config.LIVE_CAPITAL_USDT,
+                     config.account_currency())
         s["capital_limit"] = config.LIVE_CAPITAL_USDT
         self.state.save()
 
@@ -128,21 +154,26 @@ class Engine:
             tick = {}
             for s in symbols:
                 try:
-                    tick[s] = self.md.ex.fetch_ticker(s)
+                    tick[s] = self.md.ticker(s)
                 except Exception as e2:
                     log.error("Sem preço para %s: %s", s, str(e2)[:120])
         return {s: float(t["last"]) for s, t in tick.items() if t and t.get("last")}
 
     # ------------------------------------------------------------------ proteção (a cada 20 s)
     def protect_cycle(self):
-        watch = set(self.trader.positions) | set(self.trader.pending)
+        watch = {s for s in set(self.trader.positions) | set(self.trader.pending) if self.md.market_open(s)}
         prices = self.prices(watch)
+        for symbol in watch & set(self.trader.positions):
+            try:
+                self.trader.positions[symbol]["fx"] = self.md.fx(symbol)
+            except Exception:
+                pass
         now = self.now()
-        for symbol in list(self.trader.positions):
+        for symbol in [s for s in list(self.trader.positions) if s in watch]:
             price = prices.get(symbol)
             if price:
                 self.trader.check_exit(symbol, price, price, price, now)
-        for symbol in list(self.trader.pending):
+        for symbol in [s for s in list(self.trader.pending) if s in watch]:
             price = prices.get(symbol)
             if price:
                 self.trader.check_pending(symbol, price, price, price, now, prices)
@@ -151,7 +182,7 @@ class Engine:
         if time.time() - self._last_equity_point >= config.EQUITY_POINT_SECONDS:
             self._last_equity_point = time.time()
             self.state.record_equity(equity)
-        if self.mode != "paper" and time.time() - self._last_balance_check >= 60:
+        if self.mode not in ("paper", "stocks_paper") and time.time() - self._last_balance_check >= 60:
             self._last_balance_check = time.time()
             try:
                 self.exchange_usdt = self.trader.broker.available_quote()
@@ -169,7 +200,7 @@ class Engine:
         if key == candle_key and data:
             return data
         try:
-            frames = self._frames(f"BTC/{config.QUOTE}", [config.PRIMARY_TIMEFRAME, config.CONTEXT_TIMEFRAMES[1]])
+            frames = self._frames(config.benchmark(), [config.PRIMARY_TIMEFRAME, config.CONTEXT_TIMEFRAMES[1]])
             data = (btc_context(frames), frames[config.PRIMARY_TIMEFRAME])
         except Exception as e:
             log.warning("Contexto BTC indisponível: %s", e)
@@ -228,9 +259,120 @@ class Engine:
         self.state.data["focus"] = focus
         return symbols, extra
 
+    # ------------------------------------------------------------------ regras de entrada (sem IA)
+    def event_blackout(self) -> str | None:
+        """Pausa nas entradas perto de eventos macro de alto impacto (Fed, inflação, emprego...)."""
+        try:
+            events = self.news.calendar()
+        except Exception:
+            return None
+        countries = {"USD"} | ({"EUR"} if config.QUOTE == "EUR" else set())
+        for ev in events:
+            if ev["impact"] != "High" or ev["country"] not in countries:
+                continue
+            minutes = ev["hours_from_now"] * 60
+            if -config.EVENT_BLACKOUT_AFTER_MIN <= minutes <= config.EVENT_BLACKOUT_BEFORE_MIN:
+                return f"evento macro de alto impacto ({ev['country']} {ev['event']} às {ev['time_utc'][11:]} UTC)"
+        return None
+
+    def entry_gate(self, symbol, now) -> str | None:
+        reason = self.event_blackout()
+        if reason or not self.stocks:
+            return reason
+        if not self.md.market_open(symbol):
+            return "bolsa fechada"
+        days = self.md.days_to_earnings(symbol)
+        if days is not None and 0 <= days <= config.EARNINGS_BLACKOUT_DAYS:
+            return f"resultados trimestrais daqui a {days} dia(s)"
+        return None
+
+    def markets_open(self) -> bool:
+        if not self.stocks:
+            return True
+        universe = config.TREND_UNIVERSE if config.STOCK_STRATEGY == "tendencia" else config.STOCK_UNIVERSE
+        watch = set(universe) | set(self.trader.positions)
+        return any(self.md.market_open(s) for s in watch)
+
+    def manage_positions(self, now):
+        """Regras dinâmicas de gestão das posições em cada vela (correm mesmo sem IA)."""
+        for symbol in list(self.trader.positions):
+            if self.stocks and not self.md.market_open(symbol):
+                continue
+            if self.stocks and config.EXIT_BEFORE_EARNINGS:
+                days = self.md.days_to_earnings(symbol)
+                if days is not None and days <= 1:
+                    price = self.prices([symbol]).get(symbol)
+                    if price:
+                        log.info("%s: resultados trimestrais daqui a %d dia(s), a fechar antes do anúncio", symbol, days)
+                        self.trader.close_position(symbol, "antes_resultados", price, now)
+                        continue
+            try:
+                df = self.md.ohlcv(symbol, config.PRIMARY_TIMEFRAME, 150)
+                note = self.trader.manage_rules(symbol, df, now)
+                if note:
+                    log.info("%s: %s", symbol, note)
+            except Exception as e:
+                log.warning("Regras de gestão de %s falharam: %s", symbol, e)
+
+    def trend_cycle(self, now):
+        """Estratégia de tendência de ETFs (ver bot/trend.py): sem IA, reequilíbrio mensal/semanal."""
+        from types import SimpleNamespace
+        from .trend import TrendStrategy
+        self.set_activity("Tendência: a avaliar os ETFs...")
+        strat = TrendStrategy(self.md)
+        rows = strat.scores()
+        targets = strat.targets(rows)
+        by = {r["symbol"]: r for r in rows}
+        info = self.state.data.setdefault("trend", {})
+        due = strat.rebalance_due(info.get("last_rebalance"), now)
+        notes = []
+        # 1) vendas: fora dos alvos no reequilíbrio, ou (qualquer dia) >1% abaixo da média de 200 dias
+        for sym in list(self.trader.positions):
+            r = by.get(sym)
+            broken = bool(r and sym != config.TREND_CASH_ETF and r["dist_sma_pct"] < -1.0)
+            if not ((due and sym not in targets) or broken):
+                continue
+            if not self.md.market_open(sym):
+                notes.append(f"{sym}: venda adiada (bolsa fechada)")
+                continue
+            price = self.prices([sym]).get(sym)
+            if price:
+                self.trader.close_position(sym, "abaixo_media_200" if broken else "reequilibrio", price, now)
+                notes.append(f"vendido {sym}")
+        # 2) compras no reequilíbrio (só com a bolsa aberta)
+        if due and all(self.md.market_open(s) for s in targets):
+            prices = self.prices(set(targets) | set(self.trader.positions))
+            equity = self.trader.equity(prices)
+            for sym, weight in targets.items():
+                if sym in self.trader.positions or not prices.get(sym):
+                    continue
+                price, fx = prices[sym], self.md.fx(sym)
+                value = min(equity * weight * 0.99, self.trader._cash_available() * 0.99)
+                if value < self.trader.broker.min_order_value(sym):
+                    continue
+                r = by.get(sym, {})
+                plan = SimpleNamespace(qty=value / (price * fx), price=price, stop=0.0, take_profit=0.0, risk_reward=0.0)
+                why = ("Dinheiro (nenhum outro ETF em tendência)" if sym == config.TREND_CASH_ETF else
+                       f"Tendência: momentum médio {r.get('momentum')}%, {r.get('dist_sma_pct')}% acima da média de 200 dias")
+                d = SimpleNamespace(confidence=1.0, reasoning=why)
+                self.trader.open_position(sym, plan, d, 0.0, now, "", "tendencia")
+                notes.append(f"comprado {sym} ({weight:.0%})")
+            info["last_rebalance"] = iso(now)
+        elif due:
+            notes.append("reequilíbrio à espera da abertura da bolsa")
+        info.update(time=iso(now), targets=targets, due=due, notes=notes,
+                    scores=[{k: r[k] for k in ("symbol", "momentum", "dist_sma_pct", "above_sma", "eligible",
+                                                "volatility_pct", "returns")} for r in rows])
+        log.info("Tendência: alvos %s | %s", ", ".join(f"{s} {w:.0%}" for s, w in targets.items()),
+                 "; ".join(notes) or "sem alterações")
+        self.set_activity("À espera da próxima verificação")
+        self.state.save()
+
     def decision_cycle(self, between=None):
         """between(): chamado entre pares; se devolver False o ciclo é interrompido."""
         now = self.now()
+        if self.stocks and config.STOCK_STRATEGY == "tendencia":
+            return self.trend_cycle(now)
         try:
             symbols, extra = self.select_symbols(now)
             prices = self.prices(set(symbols) | set(self.trader.positions))
@@ -239,10 +381,12 @@ class Engine:
             self.state.record_equity(equity)
             self._last_equity_point = time.time()
             log.info("=== Análise | %s | capital %.2f %s | posições: %s | a analisar: %s ===",
-                     MODE_LABELS[self.mode], equity, config.QUOTE, ", ".join(self.trader.positions) or "nenhuma",
+                     MODE_LABELS[self.mode], equity, config.account_currency(), ", ".join(self.trader.positions) or "nenhuma",
                      ", ".join(s.split("/")[0] + ("*" if s in extra else "") for s in symbols) or "nada")
             self.set_activity("A recolher notícias e calendário...")
             macro = self.news.macro()
+            self.set_activity("A gerir posições abertas...")
+            self.manage_positions(now)
             analyzed, skipped = [], []
             for symbol in symbols:
                 if between and between() is False:
@@ -290,7 +434,7 @@ class Engine:
         self.set_activity(f"A ler notícias de {symbol.split('/')[0]}...")
         news = self.news.for_symbol(symbol, macro, use_ai=config.NEWS_ENABLED)
         btc_summary, btc_frame = (None, None)
-        if not symbol.startswith("BTC/"):
+        if symbol != config.benchmark():
             btc_summary, btc_frame = self._btc(int(primary["ts"].iloc[-1]))
         ctx = build_context(
             symbol,
@@ -372,6 +516,10 @@ class Engine:
             self._last_protect = time.time()
             self.protect_cycle()
         candle = self.due_candle()
+        if candle is not None and not self.markets_open():
+            self.state.data["last_decision_candle"] = candle  # bolsas fechadas: nada a analisar
+            self.set_activity("Bolsas fechadas: à espera da abertura")
+            candle = None
         if candle is not None:
             try:
                 self.decision_cycle(between)

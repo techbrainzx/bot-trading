@@ -24,7 +24,7 @@ PROFILE_STANCE = {
 }
 PROFILE_STANCE["personalizado"] = PROFILE_STANCE["equilibrado"]
 
-SYSTEM_PROMPT = """You are the decision engine of an automated crypto trading bot that trades SPOT markets, LONG ONLY (no shorting, no leverage), in {quote}. At every {tf} candle close you receive a JSON snapshot for one symbol and must choose exactly one action:
+SYSTEM_PROMPT = """You are the decision engine of {market_desc}. At every {tf} candle close you receive a JSON snapshot for one symbol and must choose exactly one action:
 
 - BUY       -> buy now at market. Only when there is no open position for this symbol.
 - BUY_LIMIT -> pending order: buy automatically if price DROPS to entry_price (below the current price), e.g. a pullback to support/EMA. Valid for {pending} candles.
@@ -40,11 +40,11 @@ How to decide (professional swing/day trader; positive expectancy after costs is
 3. If you would buy only when price reaches a level ("wait for a retest of X" or "a close above Y"), do NOT answer HOLD: place BUY_LIMIT or BUY_STOP at that level with its stop and target. That is how waiting turns into trades.
 4. Avoid: buying when RSI > 78 on both the primary and the next timeframe, price more than ~2.5 ATR above EMA20, strongly bearish higher timeframes without reversal evidence, clearly hostile news, or a high-impact macro event (FOMC, CPI, PCE, NFP) within ~2 hours.
 5. Costs: a round trip costs about {cost}%. Every entry MUST have stop_loss below the level that invalidates the idea (inside rules.valid_stop_loss_price_range when buying now; for pending orders measured from entry_price, between {min_atr} and {max_atr} ATR below it) and take_profit at a realistic target, with (take_profit - entry) / (entry - stop_loss) >= {rr} AFTER costs (so aim for at least ~{rr_gross} before costs, or the order is rejected).
-6. Exits are automatic: stop to break-even at +{be}R and ATR trailing stop from +{trail}R. With an open position: SELL if the thesis is invalidated (structure break on a closing basis, strong bearish momentum with volume, major negative news); otherwise HOLD and optionally raise new_stop_loss to a logical higher low.
+6. Exits are automatic: at +{ptr}R half of the position is sold and the stop moves to break-even; an ATR trailing stop (wider in strong trends, tighter in ranges) and a structural stop under the last higher low start from +{trail}R; in a strong accelerating trend the target is not sold in full (the winner runs); trades with no progress after {tstop} candles are closed. Do not duplicate these rules; focus on whether the thesis still holds. With an open position: SELL if the thesis is invalidated (structure break on a closing basis, strong bearish momentum with volume, major negative news); otherwise HOLD and optionally raise new_stop_loss to a logical higher low.
 7. Evaluate every snapshot fresh. recent_decisions and recent_trades are context only: do not repeat HOLD just because you held before; if the market changed, act.
 8. Calibration: confidence = probability that the action is right (for entries: probability that take_profit is hit before stop_loss, with the trailing stop protecting winners). 0.5 is a coin flip; above 0.8 should be rare. Entries execute only with confidence >= {min_conf}.
 9. news.ai_summary is an AI digest with web search; news.headlines are raw recent headlines from {n_sources} crypto sites; macro has upcoming high-impact economic events and global market data; market has order book, funding, open interest, long/short ratio and taker buy/sell ratio (crowded longs with weak taker buying = caution; negative funding with rising price = short-squeeze fuel).
-10. market.market_regime is the market breadth (share of coins in uptrends, BTC trend): in risk_off be pickier, in risk_on trends follow through more often. track_record shows the bot's recent results by setup type (lean away from setups that keep losing, trust the ones that work). why_selected is why the portfolio manager picked this coin.
+{market_notes}10. market.market_regime is the market breadth (share of coins in uptrends, BTC trend): in risk_off be pickier, in risk_on trends follow through more often. track_record shows the bot's recent results by setup type (lean away from setups that keep losing, trust the ones that work). why_selected is why the portfolio manager picked this coin.
 11. null means unavailable; do not invent data.
 
 Fill every field. entry_price only for BUY_LIMIT/BUY_STOP (null otherwise). stop_loss and take_profit only for entries (null otherwise). new_stop_loss only for HOLD with an open position (null otherwise). Prices are plain numbers. Write bull_case, bear_case, reasoning and invalidation in European Portuguese, concise (at most ~3 sentences each)."""
@@ -124,8 +124,20 @@ class TradingBrain:
         self.votes = max(1, int(votes))
         self.on_usage = on_usage
         from .news import FEEDS
+        stocks = config.MARKET == "stocks"
+        market_desc = (
+            f"an automated trading bot for US stocks and European UCITS ETFs (cash account in {config.STOCK_CURRENCY}, "
+            "LONG ONLY, no shorting, no leverage), trading only during exchange hours" if stocks else
+            f"an automated crypto trading bot that trades SPOT markets, LONG ONLY (no shorting, no leverage), in {config.QUOTE}")
+        market_notes = (
+            "9b. Stocks: market.fundamentals has the next earnings date (the bot blocks new entries right before earnings "
+            "and exits positions the day before), valuation, analyst targets (weak signal), short interest and distance "
+            "to the 52-week high; market.fear_greed is the VIX (above ~25 = fear: be more selective). Positions are held "
+            "overnight, so prefer setups whose stop can survive a normal opening gap; respect sector and index trends "
+            "(btc_context here is the S&P 500).\n" if stocks else "")
         self.instructions = SYSTEM_PROMPT.format(
-            quote=config.QUOTE,
+            market_desc=market_desc,
+            market_notes=market_notes,
             tf=config.PRIMARY_TIMEFRAME,
             pending=config.PENDING_ORDER_CANDLES,
             stance=PROFILE_STANCE.get(config.PROFILE, PROFILE_STANCE["equilibrado"]),
@@ -137,7 +149,9 @@ class TradingBrain:
             min_conf=config.MIN_CONFIDENCE,
             be=config.BREAKEVEN_AT_R,
             trail=config.TRAIL_START_R,
-            n_sources=len(FEEDS),
+            ptr=config.PARTIAL_TP_R,
+            tstop=config.TIME_STOP_CANDLES,
+            n_sources=len(FEEDS) if not stocks else 11,
         )
 
     def _ask(self, context: dict) -> Decision:

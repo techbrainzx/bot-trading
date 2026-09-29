@@ -6,6 +6,8 @@ import ccxt
 import pandas as pd
 import requests
 
+import config
+
 log = logging.getLogger("bot")
 
 
@@ -29,7 +31,15 @@ def to_df(rows) -> pd.DataFrame:
     return df[~df.index.duplicated(keep="last")].sort_index()
 
 
+EXCLUDED_BASES = {
+    "USDT", "USDC", "FDUSD", "TUSD", "DAI", "USDP", "USD1", "USDE", "USDS", "RLUSD", "BFUSD", "XUSD", "EURI",
+    "EUR", "GBP", "TRY", "BRL", "U", "PAXG", "XAUT", "WBTC", "WBETH", "BNSOL", "BETH", "USTC", "AEUR",
+}
+
+
 class MarketData:
+    is_stocks = False
+
     def __init__(self, exchange_id: str):
         self.ex = getattr(ccxt, exchange_id)({"enableRateLimit": True})
         retry(self.ex.load_markets)
@@ -40,6 +50,44 @@ class MarketData:
 
     def tf_ms(self, tf: str) -> int:
         return self.ex.parse_timeframe(tf) * 1000
+
+    def now_ms(self) -> int:
+        return self.ex.milliseconds()
+
+    # interface comum com as ações (bot/stockdata.py)
+    def ticker(self, symbol: str) -> dict:
+        return retry(lambda: self.ex.fetch_ticker(symbol))
+
+    def has_symbol(self, symbol: str) -> bool:
+        return symbol in self.ex.markets
+
+    def prefetch(self, symbols, tfs):
+        pass
+
+    def market_open(self, symbol: str) -> bool:
+        return True  # cripto negoceia 24/7
+
+    def market_status(self) -> list:
+        return []
+
+    def fx(self, symbol: str, account: str | None = None) -> float:
+        return 1.0
+
+    def liquid_symbols(self, n: int, min_volume: float) -> list[str]:
+        """As moedas mais negociadas contra a moeda de cotação."""
+        rows = []
+        for sym, t in self.all_tickers().items():
+            m = self.ex.markets.get(sym)
+            if not m or not m.get("spot") or not m.get("active") or m.get("quote") != config.QUOTE:
+                continue
+            base = m["base"]
+            if base in EXCLUDED_BASES or base.endswith(("UP", "DOWN", "BULL", "BEAR")):
+                continue
+            vol = float(t.get("quoteVolume") or 0)
+            if vol >= min_volume:
+                rows.append((sym, vol))
+        rows.sort(key=lambda x: -x[1])
+        return [s for s, _ in rows[:n]]
 
     def ohlcv(self, symbol: str, tf: str, limit: int, closed_only: bool = True) -> pd.DataFrame:
         """Últimas `limit` velas (por defeito só as já FECHADAS)."""
