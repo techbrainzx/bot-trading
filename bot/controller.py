@@ -83,9 +83,11 @@ class Controller:
         return self.running
 
     def _ensure_engine(self) -> Engine:
-        md = self.mds.get(config.MARKET)
+        key = config.mode_key()
+        md_key = key if config.MARKET == "cfd" else config.MARKET  # CFDs: Yahoo no teste, cTrader no demo/real
+        md = self.mds.get(md_key)
         if md is None:
-            md = self.mds[config.MARKET] = make_market_data(config.MARKET)
+            md = self.mds[md_key] = make_market_data(config.MARKET, key)
         if self.engine is None or self.engine.mode != config.mode_key():
             self.engine = Engine(config.mode_key(), md)
             self.engine.on_activity = self._publish
@@ -184,17 +186,18 @@ class Controller:
             path.unlink()
         if self.engine and self.engine.mode == key:
             self.engine = None
-        log.info("Modo Teste recomeçado com %.2f USDT fictícios.", balance)
+        log.info("Modo Teste recomeçado com %.2f %s fictícios.", balance, config.account_currency())
 
     def cmd_set_market(self, market: str):
-        """Troca entre cripto e ações. Cada mercado tem as suas carteiras; volta sempre ao Modo Teste."""
-        if market not in ("crypto", "stocks") or market == config.MARKET:
+        """Troca entre cripto, ações e CFDs. Cada mercado tem as suas carteiras; volta sempre ao Modo Teste."""
+        if market not in ("crypto", "stocks", "cfd") or market == config.MARKET:
             return
         self.stop()
         config.save({"MARKET": market, "MODE": "paper"})
         self.engine = None
         self.error = None
-        log.info("Mercado mudado para %s (Modo Teste).", "Ações e ETFs" if market == "stocks" else "Cripto")
+        log.info("Mercado mudado para %s (Modo Teste).",
+                 {"stocks": "Ações e ETFs", "cfd": "CFDs (ouro, forex, índices)"}.get(market, "Cripto"))
 
     def cmd_set_mode(self, mode: str, testnet: bool = False, capital: float | None = None):
         prev = config.current()

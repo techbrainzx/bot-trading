@@ -36,17 +36,21 @@ class Scanner:
     def universe(self) -> list[str]:
         """As mais negociadas (cache de 30 min). Em ações, só as que têm a bolsa aberta agora."""
         ts, syms, key = self._universe if len(self._universe) == 3 else (0.0, [], None)
-        if not (syms and time.time() - ts < 1800 and key == (config.SCAN_UNIVERSE, config.QUOTE, config.MARKET)):
+        new_key = (config.SCAN_UNIVERSE, config.QUOTE, config.MARKET, tuple(config.STOCK_UNIVERSE), config.STOCK_DISCOVERY,
+                   tuple(config.CFD_UNIVERSE))
+        ttl = 1800 if config.MARKET == "crypto" else 600  # nas ações, as bolsas abertas mudam ao longo do dia
+        if not (syms and time.time() - ts < ttl and key == new_key):
             syms = self.md.liquid_symbols(config.SCAN_UNIVERSE, self.min_volume())
-            self._universe = (time.time(), syms, (config.SCAN_UNIVERSE, config.QUOTE, config.MARKET))
-        return [s for s in syms if self.md.market_open(s)]
+            self._universe = (time.time(), syms, new_key)
+        mine = [s for s in config.SYMBOLS if s not in syms]  # os teus ativos entram sempre, sem filtro de volume
+        return [s for s in syms + mine if self.md.market_open(s)]
 
     def _analyze(self, sym, tickers, btc_ret, higher_tf):
         primary = self.md.ohlcv(sym, config.PRIMARY_TIMEFRAME, 250)
         higher = self.md.ohlcv(sym, higher_tf, 250)
         if len(primary) < 60:
             return None
-        r = detect_setups(primary, higher)
+        r = detect_setups(primary, higher, allow_short=config.MARKET == "cfd" and config.CFD_ALLOW_SHORT)
         c = primary["close"]
         price = float(c.iloc[-1])
         e20, e50, e200 = ind.ema(c, 20), ind.ema(c, 50), ind.ema(c, 200)
@@ -86,6 +90,7 @@ class Scanner:
             "volume_24h": t.get("quoteVolume"),
             "price": t.get("last") or price,
             "rel_strength_vs_btc": rel,
+            "mine": sym in config.SYMBOLS,
             "above_ema50_higher": above_ema50_higher,
         }
 
@@ -93,7 +98,8 @@ class Scanner:
         t0 = time.time()
         higher_tf = config.CONTEXT_TIMEFRAMES[1]
         self.md.prefetch(list(dict.fromkeys(self.md.liquid_symbols(config.SCAN_UNIVERSE, self.min_volume())
-                                            + [config.benchmark()])), [config.PRIMARY_TIMEFRAME, higher_tf])
+                                            + list(config.SYMBOLS) + [config.benchmark()])),
+                         [config.PRIMARY_TIMEFRAME, higher_tf])
         syms = self.universe()
         tickers = self.md.all_tickers()
         btc_trend_higher, btc_ret = None, None

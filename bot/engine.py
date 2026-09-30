@@ -8,12 +8,12 @@ from openai import OpenAI
 import config
 from . import indicators as ind
 from .analysis import btc_context, build_context, detect_setups
-from .brain import ENTRY_ACTIONS, Decision, TradingBrain
-from .broker import ExchangeBroker, PaperBroker
+from .brain import LONG_ENTRY_ACTIONS, Decision, TradingBrain
+from .broker import CfdPaperBroker, ExchangeBroker, PaperBroker
 from .journal import Journal
 from .market import MarketData
 from .news import NewsHub
-from .risk import RiskManager
+from .risk import RiskManager, side_of
 from .scanner import Scanner
 from .selector import AISelector
 from .state import State
@@ -23,7 +23,13 @@ log = logging.getLogger("bot")
 
 MODE_LABELS = {"paper": "MODO TESTE", "testnet": "MODO REAL (TESTNET)", "live": "MODO REAL",
                "stocks_paper": "AÇÕES · MODO TESTE", "stocks_demo": "AÇÕES · MODO REAL (DEMO)",
-               "stocks_live": "AÇÕES · MODO REAL"}
+               "stocks_live": "AÇÕES · MODO REAL",
+               "cfd_paper": "CFDs · MODO TESTE", "cfd_demo": "CFDs · MODO REAL (DEMO)", "cfd_live": "CFDs · MODO REAL"}
+BROKER_NAMES = {"crypto": "Binance", "stocks": "Trading 212", "cfd": "cTrader"}
+
+
+def market_of(mode: str) -> str:
+    return "stocks" if mode.startswith("stocks") else "cfd" if mode.startswith("cfd") else "crypto"
 
 
 class ConfigError(Exception):
@@ -36,21 +42,29 @@ def check_ready(mode: str):
     if not config.OPENAI_API_KEY:
         raise ConfigError("Falta a chave da OpenAI (Definições > Chaves API).")
     key, secret = config.exchange_keys(mode)
-    if mode not in ("paper", "stocks_paper") and not (key and secret):
-        broker = "Trading 212" if mode.startswith("stocks") else "Binance"
-        raise ConfigError(f"Faltam as chaves da {broker} para o Modo Real.")
-    if mode in ("live", "stocks_live") and not config.LIVE_CONFIRMED:
+    if mode in ("cfd_demo", "cfd_live"):
+        if not (config.CTRADER_CLIENT_ID and config.CTRADER_CLIENT_SECRET and config.CTRADER_ACCESS_TOKEN):
+            raise ConfigError("Falta ligar a conta cTrader (Modo Real > Ligar ao cTrader).")
+        if not config.ctrader_account(mode):
+            raise ConfigError("Falta escolher a conta cTrader do Modo Real.")
+    elif not config.is_paper(mode) and not (key and secret):
+        raise ConfigError(f"Faltam as chaves da {BROKER_NAMES[market_of(mode)]} para o Modo Real.")
+    if mode in ("live", "stocks_live", "cfd_live") and not config.LIVE_CONFIRMED:
         raise ConfigError("O Modo Real ainda não foi confirmado na interface.")
 
 
 def start_cash_for(mode: str) -> float:
-    return config.PAPER_START_BALANCE if mode in ("paper", "stocks_paper") else config.LIVE_CAPITAL_USDT
+    return config.PAPER_START_BALANCE if config.is_paper(mode) else config.LIVE_CAPITAL_USDT
 
 
-def make_market_data(market: str | None = None):
-    if (market or config.MARKET) == "stocks":
+def make_market_data(market: str | None = None, mode: str | None = None):
+    market = market or config.MARKET
+    if market == "stocks":
         from .stockdata import StockData
         return StockData()
+    if market == "cfd":
+        from .cfddata import CfdData
+        return CfdData(mode)
     return MarketData(config.EXCHANGE)
 
 
@@ -58,8 +72,11 @@ class Engine:
     def __init__(self, mode: str | None = None, md: MarketData | None = None):
         self.mode = mode or config.mode_key()
         check_ready(self.mode)
-        self.stocks = self.mode.startswith("stocks")
-        self.md = md or make_market_data("stocks" if self.stocks else "crypto")
+        self.market = market_of(self.mode)
+        self.stocks = self.market == "stocks"
+        self.cfd = self.market == "cfd"
+        self.paper = config.is_paper(self.mode)
+        self.md = md or make_market_data(self.market, self.mode)
         self.state = State(config.state_path(self.mode), start_cash_for(self.mode))
         self.client = OpenAI(api_key=config.OPENAI_API_KEY, max_retries=3, timeout=300)
         self.brain = TradingBrain(self.client, config.DECISION_MODEL, config.REASONING_EFFORT,
@@ -67,7 +84,7 @@ class Engine:
                                   fallback_model=config.DECISION_FALLBACK_MODEL)
         self.news = NewsHub(self.client if config.NEWS_ENABLED else None, config.NEWS_MODEL,
                             config.NEWS_REFRESH_MINUTES, on_usage=self._usage,
-                            market="stocks" if self.stocks else "crypto")
+                            market=self.market)
         self.scanner = Scanner(self.md, perf_adjust=lambda setup: setup_score_adjust(self.state.data["trades"], setup))
         self.selector = AISelector(self.client, config.SELECTOR_MODEL, on_usage=self._usage)
         if self.mode == "paper":
@@ -76,6 +93,21 @@ class Engine:
             broker = PaperBroker(
                 fee_pct=lambda s: config.STOCK_FEE_PCT if self.md.currency(s) != config.STOCK_CURRENCY else 0.0,
                 fx=self.md.fx, min_order=config.STOCK_MIN_ORDER)
+        elif self.mode == "cfd_paper":
+            broker = CfdPaperBroker(spec=self.md.spec, fx=self.md.fx)
+        elif self.cfd:
+            from . import ctrader
+            session = ctrader.session_for_mode(self.mode)
+            try:
+                broker = ctrader.CtraderBroker(session, fx=self.md.fx)
+            except Exception as e:
+                raise ConfigError(f"Não foi possível ligar ao cTrader: {ctrader.friendly(e)}") from e
+            if broker.currency and broker.currency != config.CFD_CURRENCY:
+                if self.state.data["positions"]:
+                    raise ConfigError(f"A conta cTrader está em {broker.currency} e o bot tem posições em "
+                                      f"{config.CFD_CURRENCY}. Fecha-as antes de mudar de conta.")
+                config.save({"CFD_CURRENCY": broker.currency})
+            self._sync_capital()
         elif self.stocks:
             from .t212 import Trading212Broker
             key, secret = config.exchange_keys(self.mode)
@@ -86,10 +118,12 @@ class Engine:
             broker = ExchangeBroker(config.EXCHANGE, key, secret, sandbox=self.mode == "testnet")
             self._sync_capital()
         self.journal = Journal(config.LOGS_DIR, prefix=f"{self.mode}_")
-        self.trader = Trader(self.state, broker, RiskManager(), self.journal, currency=config.account_currency())
+        self.trader = Trader(self.state, broker, RiskManager(), self.journal, currency=config.account_currency(),
+                             cfd=self.cfd)
         self.trader.fx = self.md.fx
-        self.trader.risk_mult = lambda symbol, setup: dynamic_risk_multiplier(
-            self.state.data["trades"], setup, ((self.state.data.get("focus") or {}).get("regime") or {}).get("state"))
+        self.trader.risk_mult = lambda symbol, setup, side="long": dynamic_risk_multiplier(
+            self.state.data["trades"], setup, ((self.state.data.get("focus") or {}).get("regime") or {}).get("state"),
+            side)
         self.trader.entry_gate = self.entry_gate
         self._btc_cache = (None, None)
         self._last_protect = 0.0
@@ -98,6 +132,7 @@ class Engine:
         self.exchange_usdt = None
         self.activity = "Pronto"
         self._limit_warned = None
+        self._last_sync = 0.0
         self.on_activity = None  # chamado quando a atividade muda (a interface atualiza logo)
 
     def set_activity(self, text: str):
@@ -161,6 +196,9 @@ class Engine:
 
     # ------------------------------------------------------------------ proteção (a cada 20 s)
     def protect_cycle(self):
+        now = self.now()
+        if self.cfd:
+            self.cfd_housekeeping(now)
         watch = {s for s in set(self.trader.positions) | set(self.trader.pending) if self.md.market_open(s)}
         prices = self.prices(watch)
         for symbol in watch & set(self.trader.positions):
@@ -168,7 +206,6 @@ class Engine:
                 self.trader.positions[symbol]["fx"] = self.md.fx(symbol)
             except Exception:
                 pass
-        now = self.now()
         for symbol in [s for s in list(self.trader.positions) if s in watch]:
             price = prices.get(symbol)
             if price:
@@ -182,12 +219,58 @@ class Engine:
         if time.time() - self._last_equity_point >= config.EQUITY_POINT_SECONDS:
             self._last_equity_point = time.time()
             self.state.record_equity(equity)
-        if self.mode not in ("paper", "stocks_paper") and time.time() - self._last_balance_check >= 60:
+        if not self.paper and time.time() - self._last_balance_check >= 60:
             self._last_balance_check = time.time()
             try:
                 self.exchange_usdt = self.trader.broker.available_quote()
             except Exception as e:
-                log.warning("Não foi possível ler o saldo da Binance: %s", e)
+                log.warning("Não foi possível ler o saldo da %s: %s", BROKER_NAMES[self.market], e)
+        self.state.save()
+
+    # ------------------------------------------------------------------ CFDs: corretora, financiamento e fim de semana
+    def cfd_housekeeping(self, now):
+        if not self.paper and time.time() - self._last_sync >= 20:
+            self._last_sync = time.time()
+            try:
+                self.trader.sync_broker(now)  # posições fechadas na corretora + stops atualizados lá
+            except Exception as e:
+                log.warning("Sincronização com o cTrader falhou: %s", e)
+        if self.paper:
+            self.charge_swaps(now)
+        if config.CFD_CLOSE_BEFORE_WEEKEND and now.weekday() == 4 and now.hour * 60 + now.minute >= 20 * 60 + 30:
+            if self.trader.pending:
+                for symbol in list(self.trader.pending):
+                    self.trader.cancel_pending(symbol, "fim de semana")
+            if self.trader.positions:
+                prices = self.prices(self.trader.positions)
+                for symbol in list(self.trader.positions):
+                    price = prices.get(symbol)
+                    if price:
+                        log.info("%s: fecho antes do fim de semana (evita o salto de preço de segunda-feira)", symbol)
+                        self.trader.close_position(symbol, "fim_de_semana", price, now)
+
+    def charge_swaps(self, now):
+        """Modo Teste: custo de financiamento de cada noite (como a corretora cobra às 22h UTC, 3x à quarta)."""
+        if now.weekday() >= 5 or now.hour < 21:
+            return
+        day = now.strftime("%Y-%m-%d")
+        s = self.state.data
+        if s.get("last_swap_day") == day:
+            return
+        s["last_swap_day"] = day
+        if not self.trader.positions:
+            return
+        prices = self.prices(self.trader.positions)
+        mult = 3 if now.weekday() == 2 else 1
+        for symbol, pos in self.trader.positions.items():
+            if datetime.fromisoformat(pos["opened_at"]) > now.replace(hour=21, minute=0, second=0, microsecond=0):
+                continue
+            price = prices.get(symbol) or pos["entry_price"]
+            fee = pos["qty"] * price * self.md.fx(symbol) * config.CFD_SWAP_PCT_YEAR / 100 / 365 * mult
+            s["cash"] -= fee
+            pos["entry_cost"] += fee
+            pos["swap"] = pos.get("swap", 0.0) - fee
+            log.info("%s: financiamento noturno %.2f %s", symbol, fee, config.account_currency())
         self.state.save()
 
     # ------------------------------------------------------------------ decisão (a cada vela)
@@ -260,13 +343,17 @@ class Engine:
         return symbols, extra
 
     # ------------------------------------------------------------------ regras de entrada (sem IA)
-    def event_blackout(self) -> str | None:
+    def event_blackout(self, symbol: str | None = None) -> str | None:
         """Pausa nas entradas perto de eventos macro de alto impacto (Fed, inflação, emprego...)."""
         try:
             events = self.news.calendar()
         except Exception:
             return None
-        countries = {"USD"} | ({"EUR"} if config.QUOTE == "EUR" else set())
+        if self.cfd:
+            from .catalog import CFD_SPECS
+            countries = set((CFD_SPECS.get(symbol) or {}).get("ccys") or ["USD"])
+        else:
+            countries = {"USD"} | ({"EUR"} if config.QUOTE == "EUR" or self.stocks else set())
         for ev in events:
             if ev["impact"] != "High" or ev["country"] not in countries:
                 continue
@@ -276,27 +363,34 @@ class Engine:
         return None
 
     def entry_gate(self, symbol, now) -> str | None:
-        reason = self.event_blackout()
-        if reason or not self.stocks:
+        reason = self.event_blackout(symbol)
+        if reason or self.market == "crypto":
             return reason
         if not self.md.market_open(symbol):
-            return "bolsa fechada"
+            return "mercado fechado" if self.cfd else "bolsa fechada"
+        if self.cfd:
+            if config.CFD_CLOSE_BEFORE_WEEKEND and now.weekday() == 4 and now.hour >= 19:
+                return "perto do fecho de sexta-feira (as posições fecham antes do fim de semana)"
+            return None
         days = self.md.days_to_earnings(symbol)
         if days is not None and 0 <= days <= config.EARNINGS_BLACKOUT_DAYS:
             return f"resultados trimestrais daqui a {days} dia(s)"
         return None
 
     def markets_open(self) -> bool:
-        if not self.stocks:
+        if self.market == "crypto":
             return True
-        universe = config.TREND_UNIVERSE if config.STOCK_STRATEGY == "tendencia" else config.STOCK_UNIVERSE
+        if self.cfd:
+            universe = config.CFD_UNIVERSE + config.CFD_ASSETS
+        else:
+            universe = config.TREND_UNIVERSE if config.STOCK_STRATEGY == "tendencia" else config.STOCK_UNIVERSE
         watch = set(universe) | set(self.trader.positions)
         return any(self.md.market_open(s) for s in watch)
 
     def manage_positions(self, now):
         """Regras dinâmicas de gestão das posições em cada vela (correm mesmo sem IA)."""
         for symbol in list(self.trader.positions):
-            if self.stocks and not self.md.market_open(symbol):
+            if self.market != "crypto" and not self.md.market_open(symbol):
                 continue
             if self.stocks and config.EXIT_BEFORE_EARNINGS:
                 days = self.md.days_to_earnings(symbol)
@@ -411,7 +505,8 @@ class Engine:
         primary = frames[config.PRIMARY_TIMEFRAME]
         price = prices.get(symbol) or float(primary["close"].iloc[-1])
         atr = float(ind.atr(primary).iloc[-1])
-        setups = detect_setups(primary, frames.get(config.CONTEXT_TIMEFRAMES[1]))
+        setups = detect_setups(primary, frames.get(config.CONTEXT_TIMEFRAMES[1]),
+                               allow_short=self.cfd and config.CFD_ALLOW_SHORT)
 
         busy = symbol in self.trader.positions or symbol in self.trader.pending
         if config.ONLY_WITH_SETUP and not busy and not setups["setups"]:
@@ -468,9 +563,11 @@ class Engine:
             d = Decision.hold(f"erro na IA: {e}")
         elapsed = time.time() - t0
 
-        setup_name = setups["setups"][0]["setup"] if setups["setups"] else None
+        wanted = side_of(d.action)
+        match = [x for x in setups["setups"] if side_of(x.get("order")) == wanted] or setups["setups"]
+        setup_name = match[0]["setup"] if match else None
         need = config.MIN_CONFIDENCE + config.RISK_OFF_EXTRA_CONFIDENCE
-        if regime and regime.get("state") == "risk_off" and d.action in ENTRY_ACTIONS \
+        if regime and regime.get("state") == "risk_off" and d.action in LONG_ENTRY_ACTIONS \
                 and symbol not in self.trader.positions and d.confidence < need:
             outcome = f"bloqueado: mercado desfavorável, exige confiança ≥ {need:.2f}"
         else:
@@ -518,7 +615,7 @@ class Engine:
         candle = self.due_candle()
         if candle is not None and not self.markets_open():
             self.state.data["last_decision_candle"] = candle  # bolsas fechadas: nada a analisar
-            self.set_activity("Bolsas fechadas: à espera da abertura")
+            self.set_activity("Mercados fechados: à espera da abertura" if self.cfd else "Bolsas fechadas: à espera da abertura")
             candle = None
         if candle is not None:
             try:
@@ -529,7 +626,7 @@ class Engine:
 
     def run_forever(self):
         coins = "escolha automática" if config.AUTO_SELECT else ", ".join(config.SYMBOLS)
-        log.info("Bot iniciado | %s | moedas: %s | timeframe %s | modelo %s",
+        log.info("Bot iniciado | %s | ativos: %s | timeframe %s | modelo %s",
                  MODE_LABELS[self.mode], coins, config.PRIMARY_TIMEFRAME, config.DECISION_MODEL)
         while True:
             try:

@@ -27,10 +27,13 @@ from bot.broker import verify_keys
 from bot.controller import Controller
 from bot.engine import ConfigError, make_market_data
 from bot.journal import setup_logging
-from bot.news import FEEDS, STOCK_FEEDS, NewsHub
+from bot.news import NewsHub, feeds_for
 from bot.t212 import verify_t212
+from bot import assets as assets_mod
+from bot import ctrader
+from bot.risk import sgn, side_of
 from bot.scanner import Scanner
-from bot.trader import trade_stats
+from bot.trader import position_value, trade_stats
 
 PORT = 8765
 TOKEN = secrets.token_urlsafe(24)
@@ -44,7 +47,7 @@ MODEL_OPTIONS = [
 ]
 ASSET_OPTIONS = ["BTC", "ETH", "SOL", "XRP", "BNB", "DOGE", "ADA", "LINK", "SUI", "NEAR", "AVAX", "LTC", "HBAR",
                  "DOT", "TRX", "UNI", "AAVE", "ONDO", "TAO", "ENA", "XLM", "PEPE"]
-CHART_TFS = {"crypto": ["15m", "1h", "4h", "1d"], "stocks": ["15m", "1h", "1d", "1wk"]}
+CHART_TFS = {"crypto": ["15m", "1h", "4h", "1d"], "stocks": ["15m", "1h", "1d", "1wk"], "cfd": ["15m", "1h", "4h", "1d"]}
 TICKER_RX = re.compile(r"^[A-Z0-9][A-Z0-9.\-]{0,11}$")
 BOUNDS = {
     "RISK_PER_TRADE_PCT": (0.1, 5), "RISK_FIXED_AMOUNT": (0.05, 100_000), "MAX_POSITION_PCT": (5, 100),
@@ -67,10 +70,12 @@ CHOICES = {
     "RISK_MODE": ["percent", "fixed"],
     "STOCK_STRATEGY": ["ativo", "tendencia"],
     "STOCK_CURRENCY": ["EUR", "USD"],
+    "CFD_CURRENCY": ["EUR", "USD"],
     "TREND_REBALANCE": ["monthly", "weekly"],
 }
-BOOLS = ["NEWS_ENABLED", "SCANNER_ENABLED", "ONLY_WITH_SETUP", "AUTO_SELECT", "EXIT_BEFORE_EARNINGS"]
-USER_SETTINGS = ["ASSETS", "STOCK_UNIVERSE", "STOCK_ASSETS", *CHOICES, *BOOLS, *BOUNDS]
+BOOLS = ["NEWS_ENABLED", "SCANNER_ENABLED", "ONLY_WITH_SETUP", "AUTO_SELECT", "EXIT_BEFORE_EARNINGS",
+         "CFD_ALLOW_SHORT", "CFD_CLOSE_BEFORE_WEEKEND"]
+USER_SETTINGS = ["ASSETS", "STOCK_ASSETS", "CFD_ASSETS", *CHOICES, *BOOLS, *BOUNDS]
 
 
 # ============================================================ logs em memória para a interface
@@ -110,7 +115,7 @@ class UIMarket:
         return md
 
     def cached(self, key, ttl, fn):
-        key = (config.MARKET,) + tuple(key)
+        key = (config.mode_key(),) + tuple(key)
         hit = self.cache.get(key)
         if hit and time.time() - hit[0] < ttl:
             return hit[1]
@@ -128,7 +133,7 @@ class UIMarket:
                                lambda md: md.tickers(symbols))
         except Exception as e:
             log.debug("tickers falhou: %s", e)
-            hit = self.cache.get((config.MARKET, "tickers", tuple(symbols)))
+            hit = self.cache.get((config.mode_key(), "tickers", tuple(symbols)))
             return hit[1] if hit else {}
 
     def candles(self, symbol, tf):
@@ -221,7 +226,8 @@ def status():
     fixed = [] if config.AUTO_SELECT else list(config.SYMBOLS)
     if config.MARKET == "stocks" and config.STOCK_STRATEGY == "tendencia":
         top = list(((st.get("trend") or {}).get("targets") or {}).keys()) or config.TREND_UNIVERSE[:4]
-    default = config.STOCK_ASSETS[:4] if config.MARKET == "stocks" else [config.benchmark()]
+    default = {"stocks": config.STOCK_ASSETS[:4], "cfd": config.CFD_ASSETS[:4] or ["XAUUSD"]}.get(
+        config.MARKET, [config.benchmark()])
     tab_syms = list(dict.fromkeys(list(positions) + top + list(pending) + fixed)) or default
     tick = ui.tickers(tab_syms)
     price = {s: float(t["last"]) for s, t in tick.items() if t.get("last")}
@@ -230,14 +236,19 @@ def status():
     invested = 0.0
     for sym, p in positions.items():
         px = price.get(sym, p["entry_price"])
-        value = p["qty"] * px * p.get("fx", 1.0)
+        value = position_value(p, px)
         invested += value
-        risk_unit = p["entry_price"] - p["initial_stop"]
+        side = side_of(p)
+        sg = sgn(side)
+        risk_unit = sg * (p["entry_price"] - p["initial_stop"])
         pnl = value - p["entry_cost"]
+        pnl_pct = (sg * (px / p["entry_price"] - 1) * 100 if p.get("cfd")
+                   else pnl / p["entry_cost"] * 100 if p["entry_cost"] else 0)
         pos_out.append({
-            "symbol": sym, "qty": p["qty"], "entry_price": p["entry_price"], "price": px, "value": value,
-            "pnl": pnl, "pnl_pct": pnl / p["entry_cost"] * 100 if p["entry_cost"] else 0,
-            "r": (px - p["entry_price"]) / risk_unit if risk_unit > 0 else None,
+            "symbol": sym, "side": side, "qty": p["qty"], "entry_price": p["entry_price"], "price": px, "value": value,
+            "margin": p.get("margin"), "notional": p["qty"] * px * p.get("fx", 1.0) if p.get("cfd") else None,
+            "pnl": pnl, "pnl_pct": pnl_pct,
+            "r": sg * (px - p["entry_price"]) / risk_unit if risk_unit > 0 else None,
             "stop": p["stop"], "initial_stop": p["initial_stop"], "take_profit": p["take_profit"],
             "opened_at": p["opened_at"], "confidence": p.get("confidence"), "reasoning": p.get("reasoning", ""),
             "setup": p.get("setup"), "partial_done": p.get("partial_done"), "let_run": p.get("let_run"),
@@ -271,26 +282,49 @@ def status():
         "exchange_usdt": snap["exchange_usdt"], "capital_limit": config.LIVE_CAPITAL_USDT,
         "symbols": config.SYMBOLS, "tab_symbols": tab_syms, "quote": config.account_currency(), "profile": config.PROFILE,
         "market": config.MARKET, "benchmark_label": config.benchmark_label(), "chart_tfs": CHART_TFS[config.MARKET],
-        "exchanges": ui.market_status() if config.MARKET == "stocks" else [],
+        "exchanges": ui.market_status() if config.MARKET != "crypto" else [],
+        "allow_short": config.MARKET == "cfd" and config.CFD_ALLOW_SHORT,
         "strategy": config.STOCK_STRATEGY if config.MARKET == "stocks" else "ativo",
         "trend": st.get("trend") if config.MARKET == "stocks" else None,
         "timeframe": config.PRIMARY_TIMEFRAME, "model": config.DECISION_MODEL,
-        "scanner": {"enabled": config.SCANNER_ENABLED, "top": config.SCAN_TOP, "universe": config.SCAN_UNIVERSE},
+        "scanner": {"enabled": config.SCANNER_ENABLED, "top": config.SCAN_TOP,
+                    "universe": min(config.SCAN_UNIVERSE, len(config.CFD_UNIVERSE)) if config.MARKET == "cfd" else config.SCAN_UNIVERSE},
         "risk_mode": config.RISK_MODE, "risk_fixed": config.RISK_FIXED_AMOUNT, "risk_pct": config.RISK_PER_TRADE_PCT,
         "tickers": {s: {"last": price.get(s), "change_pct": (tick.get(s) or {}).get("percentage")}
                     for s in tab_syms},
         "keys": {"openai": mask(config.OPENAI_API_KEY), "binance": mask(config.EXCHANGE_API_KEY),
                  "testnet": mask(config.TESTNET_API_KEY), "t212": mask(config.T212_API_KEY),
-                 "t212_demo": mask(config.T212_DEMO_API_KEY)},
+                 "t212_demo": mask(config.T212_DEMO_API_KEY),
+                 "ctrader_demo": ctrader_label("cfd_demo"), "ctrader_live": ctrader_label("cfd_live")},
+        "ctrader": ctrader_state(),
         "live_confirmed": config.LIVE_CONFIRMED, "use_testnet": config.USE_TESTNET,
     }
+
+
+def ctrader_label(key: str) -> str | None:
+    """Texto da conta cTrader ligada (para a janela do Modo Real), ou None."""
+    account = config.ctrader_account(key)
+    if not (ctrader.has_app() and ctrader.has_token() and account):
+        return None
+    return f"conta {account}"
+
+
+def ctrader_state() -> dict:
+    try:
+        expires = int(config.CTRADER_TOKEN_EXPIRES or 0)
+    except ValueError:
+        expires = 0
+    return {"app": ctrader.has_app(), "client_id": mask(config.CTRADER_CLIENT_ID) or (config.CTRADER_CLIENT_ID[:6] + "…"
+                                                                                        if config.CTRADER_CLIENT_ID else None),
+            "token": ctrader.has_token(), "token_expires": expires or None,
+            "demo_account": config.CTRADER_DEMO_ACCOUNT or None, "live_account": config.CTRADER_LIVE_ACCOUNT or None}
 
 
 def recent_decisions(st: dict) -> dict:
     """Última decisão de cada par analisado recentemente (fixos, posições, pendentes e radar)."""
     out = {}
     for sym, hist in st["decisions"].items():
-        ok = ("/" not in sym) if config.MARKET == "stocks" else sym.endswith("/" + config.QUOTE)
+        ok = ("/" not in sym) if config.MARKET != "crypto" else sym.endswith("/" + config.QUOTE)
         if hist and ok:
             out[sym] = hist[-1]
     ordered = sorted(out.items(), key=lambda kv: kv[1].get("time") or "", reverse=True)
@@ -333,12 +367,13 @@ def news():
     asset = None
     hub = ui_news()
     heads = hub.headlines(asset, hours=36, limit=60)
-    feeds = STOCK_FEEDS if config.MARKET == "stocks" else FEEDS
+    feeds = feeds_for(config.MARKET)
     return {
         "headlines": heads,
         "events": hub.calendar(),
         "global": hub.global_market(),
-        "vix": ui._md().fear_greed() if config.MARKET == "stocks" else None,
+        "market": config.MARKET,
+        "vix": ui._md().fear_greed() if config.MARKET != "crypto" else None,
         "sources": hub.feed_status or {k: "?" for k in feeds},
     }
 
@@ -420,21 +455,26 @@ def candles(symbol: str, tf: str = "1h"):
     for t in st["trades"]:
         if t["symbol"] != symbol:
             continue
-        for kind, stamp, px in (("buy", t["opened_at"], t["entry_price"]), ("sell", t["closed_at"], t["exit_price"])):
+        short = t.get("side") == "short"
+        for kind, stamp, px in (("short" if short else "buy", t["opened_at"], t["entry_price"]),
+                                ("cover" if short else "sell", t["closed_at"], t["exit_price"])):
             bt = bar_time(stamp)
             if bt >= first:
-                markers.append({"time": bt, "kind": kind, "price": px, "pnl": t["pnl"] if kind == "sell" else None})
+                closing = kind in ("sell", "cover")
+                markers.append({"time": bt, "kind": kind, "price": px, "pnl": t["pnl"] if closing else None})
     pos = st["positions"].get(symbol)
     lines = None
     pend = st.get("pending", {}).get(symbol)
     if pend and not pos:
         lines = {"pending": pend["trigger"], "pending_type": pend["type"], "stop": pend["stop"],
-                 "take_profit": pend["take_profit"]}
+                 "take_profit": pend["take_profit"], "side": side_of(pend)}
     if pos:
         bt = bar_time(pos["opened_at"])
         if bt >= first:
-            markers.append({"time": bt, "kind": "buy", "price": pos["entry_price"], "pnl": None})
-        lines = {"entry": pos["entry_price"], "stop": pos["stop"], "take_profit": pos["take_profit"]}
+            markers.append({"time": bt, "kind": "short" if side_of(pos) == "short" else "buy",
+                            "price": pos["entry_price"], "pnl": None})
+        lines = {"entry": pos["entry_price"], "stop": pos["stop"], "take_profit": pos["take_profit"],
+                 "side": side_of(pos)}
     markers.sort(key=lambda m: m["time"])
     return {"candles": rows, "markers": markers, "lines": lines}
 
@@ -495,7 +535,7 @@ def reset_test(payload: dict = Body(...)):
 @app.post("/api/market")
 def set_market(payload: dict = Body(...)):
     market = payload.get("market")
-    if market not in ("crypto", "stocks"):
+    if market not in ("crypto", "stocks", "cfd"):
         raise ValueError("mercado inválido")
     run(controller.cmd_set_market, market)
     return {"ok": True}
@@ -531,8 +571,10 @@ def set_mode(payload: dict = Body(...)):
     capital = float(payload.get("capital") or 0)
     lo, hi = BOUNDS["LIVE_CAPITAL_USDT"]
     if not lo <= capital <= hi:
-        raise ValueError(f"O capital tem de estar entre {lo:,.0f} e {hi:,.0f} USDT.")
-    if config.MARKET == "stocks":
+        raise ValueError(f"O capital tem de estar entre {lo:,.0f} e {hi:,.0f} {config.account_currency()}.")
+    if config.MARKET == "cfd":
+        check = ctrader.verify_ctrader(demo=testnet)
+    elif config.MARKET == "stocks":
         key, secret = config.exchange_keys("stocks_demo" if testnet else "stocks_live")
         check = verify_t212(key, secret, testnet)
     else:
@@ -545,6 +587,142 @@ def set_mode(payload: dict = Body(...)):
                          f"({check['usdt_free']:,.2f}).")
     run(controller.cmd_set_mode, "live", testnet, capital)
     return {"ok": True}
+
+
+_ip_cache = [0.0, ""]
+
+
+@app.get("/api/public-ip")
+def get_public_ip():
+    """IP público desta internet (o que a Binance/Trading 212 veem), para a lista de IPs de confiança."""
+    from bot.broker import public_ip
+    if not _ip_cache[1] or time.time() - _ip_cache[0] > 300:
+        _ip_cache[:] = [time.time(), public_ip()]
+    return {"ip": _ip_cache[1]}
+
+
+_oauth = {"started": 0.0, "redirect": ""}
+_accounts_cache = [0.0, None]
+
+
+@app.get("/api/ctrader/status")
+def ctrader_status(request: Request):
+    port = request.url.port or PORT
+    return {**ctrader_state(), "redirect_uri": ctrader.redirect_uri(port), "portal": ctrader.PORTAL_URL}
+
+
+@app.post("/api/ctrader/app")
+def ctrader_save_app(payload: dict = Body(...)):
+    cid = (payload.get("client_id") or "").strip()
+    secret = (payload.get("client_secret") or "").strip()
+    if not cid or not secret:
+        raise ValueError("Preenche o Client ID e o Secret da aplicação.")
+    old = (config.CTRADER_CLIENT_ID, config.CTRADER_CLIENT_SECRET)
+    config.CTRADER_CLIENT_ID, config.CTRADER_CLIENT_SECRET = cid, secret
+    try:
+        ctrader.check_app()
+    except Exception as e:
+        config.CTRADER_CLIENT_ID, config.CTRADER_CLIENT_SECRET = old
+        raise ValueError(f"O cTrader recusou a aplicação: {ctrader.friendly(e)}")
+    config.set_secret("CTRADER_CLIENT_ID", cid)
+    config.set_secret("CTRADER_CLIENT_SECRET", secret)
+    ctrader.drop_sessions()
+    log.info("cTrader: aplicação (Client ID) verificada e guardada.")
+    return {"ok": True, **ctrader_state()}
+
+
+@app.post("/api/ctrader/connect")
+def ctrader_connect(request: Request):
+    if not ctrader.has_app():
+        raise ValueError("Guarda primeiro o Client ID e o Secret da aplicação.")
+    redirect = ctrader.redirect_uri(request.url.port or PORT)
+    _oauth.update(started=time.time(), redirect=redirect)
+    url = ctrader.authorize_url(redirect)
+    try:
+        webbrowser.open(url)
+    except Exception:
+        pass
+    return {"url": url, "redirect_uri": redirect}
+
+
+CALLBACK_PAGE = """<!doctype html><html lang="pt-PT"><head><meta charset="utf-8"><title>cTrader</title>
+<style>body{{font-family:system-ui,sans-serif;background:#121211;color:#e8e6e1;display:grid;place-items:center;height:100vh;margin:0}}
+div{{max-width:460px;padding:28px;border:1px solid #333;border-radius:14px;background:#1b1b1a}}h1{{font-size:20px}}
+.ok{{color:#3fb97f}}.bad{{color:#e5534b}}</style></head><body><div><h1 class="{cls}">{title}</h1><p>{text}</p></div></body></html>"""
+
+
+@app.get("/ctrader/callback", response_class=HTMLResponse)
+def ctrader_callback(code: str = "", error: str = "", error_description: str = ""):
+    def page(ok, title, text):
+        return HTMLResponse(CALLBACK_PAGE.format(cls="ok" if ok else "bad", title=title, text=text))
+    if error or not code:
+        return page(False, "Autorização cancelada", f"O cTrader não autorizou a aplicação ({error_description or error or 'sem código'}). "
+                                                    "Volta à aplicação e tenta de novo.")
+    if time.time() - _oauth["started"] > 900:
+        return page(False, "Pedido expirado", "Carrega outra vez em \"Ligar ao cTrader\" na aplicação.")
+    try:
+        ctrader.exchange_code(code, _oauth["redirect"])
+    except Exception as e:
+        return page(False, "Não foi possível ligar", f"{ctrader.friendly(e)}. Confirma que o Redirect URI da aplicação no "
+                                                     f"portal é exatamente {_oauth['redirect']}.")
+    _oauth["started"] = 0.0
+    _accounts_cache[0] = 0.0
+    log.info("cTrader: conta autorizada com sucesso.")
+    return page(True, "Ligado ao cTrader ✓", "Podes fechar esta janela e voltar à aplicação Trading Bot IA para escolher a conta.")
+
+
+@app.post("/api/ctrader/token")
+def ctrader_manual_token(payload: dict = Body(...)):
+    token = (payload.get("access_token") or "").strip()
+    refresh = (payload.get("refresh_token") or "").strip()
+    if len(token) < 20:
+        raise ValueError("Cola o Access token completo (Playground do portal cTrader).")
+    old = (config.CTRADER_ACCESS_TOKEN, config.CTRADER_REFRESH_TOKEN, config.CTRADER_TOKEN_EXPIRES)
+    config.CTRADER_ACCESS_TOKEN, config.CTRADER_REFRESH_TOKEN, config.CTRADER_TOKEN_EXPIRES = token, refresh, ""
+    try:
+        accounts = ctrader.list_accounts()
+    except Exception as e:
+        config.CTRADER_ACCESS_TOKEN, config.CTRADER_REFRESH_TOKEN, config.CTRADER_TOKEN_EXPIRES = old
+        raise ValueError(f"O cTrader recusou o token: {ctrader.friendly(e)}")
+    ctrader.save_tokens({"accessToken": token, "refreshToken": refresh or None, "expiresIn": 2_628_000})
+    _accounts_cache[:] = [time.time(), accounts]
+    return {"ok": True, "accounts": accounts, **ctrader_state()}
+
+
+@app.get("/api/ctrader/accounts")
+def ctrader_accounts(refresh: bool = False):
+    if not (ctrader.has_app() and ctrader.has_token()):
+        return {"accounts": [], **ctrader_state()}
+    if refresh or not _accounts_cache[1] or time.time() - _accounts_cache[0] > 120:
+        try:
+            _accounts_cache[:] = [time.time(), ctrader.list_accounts()]
+        except Exception as e:
+            raise ValueError(f"Não foi possível ler as contas cTrader: {ctrader.friendly(e)}")
+    return {"accounts": _accounts_cache[1], **ctrader_state()}
+
+
+@app.post("/api/ctrader/account")
+def ctrader_pick_account(payload: dict = Body(...)):
+    demo = bool(payload.get("testnet"))
+    account = int(payload.get("account_id") or 0)
+    known = {a["id"]: a for a in (_accounts_cache[1] or ctrader.list_accounts())}
+    if account not in known:
+        raise ValueError("Conta desconhecida: atualiza a lista de contas.")
+    if known[account]["is_live"] == demo:
+        raise ValueError("Esta conta é " + ("real" if known[account]["is_live"] else "demo") +
+                         ": escolhe uma conta " + ("demo" if demo else "real") + ".")
+    st = controller.snapshot["state"]
+    key = "cfd_demo" if demo else "cfd_live"
+    if config.mode_key() == key and (st["positions"] or st.get("pending")):
+        raise ValueError("Fecha as posições desta conta antes de mudar para outra.")
+    config.save({"CTRADER_DEMO_ACCOUNT" if demo else "CTRADER_LIVE_ACCOUNT": account})
+    ctrader.drop_sessions()
+    return ctrader.verify_ctrader(demo, account)
+
+
+@app.post("/api/keys/ctrader")
+def verify_ctrader_keys(payload: dict = Body(...)):
+    return ctrader.verify_ctrader(bool(payload.get("testnet")))
 
 
 @app.post("/api/keys/binance")
@@ -577,6 +755,131 @@ def save_openai_key(payload: dict = Body(...)):
     config.set_secret("OPENAI_API_KEY", key)
     run(controller.cmd_reload)
     return {"ok": True, "masked": mask(key)}
+
+
+# ============================================================ gestão de ativos
+MAX_MY_ASSETS = 30
+_t212_cache = [0.0, None]
+
+
+def t212_lookup():
+    """Ligação à Trading 212 (se houver chaves) só para confirmar que um ativo existe lá."""
+    if time.time() - _t212_cache[0] < 3600:
+        return _t212_cache[1]
+    broker = None
+    for key_name, demo in (("stocks_live", False), ("stocks_demo", True)):
+        key, secret = config.exchange_keys(key_name)
+        if key and secret:
+            try:
+                from bot.t212 import Trading212Broker
+                broker = Trading212Broker(key, secret, demo, ui._md())
+                break
+            except Exception as e:
+                log.debug("Trading 212 indisponível para validar ativos: %s", e)
+    _t212_cache[:] = [time.time(), broker]
+    return broker
+
+
+ASSET_KEYS = {"stocks": "STOCK_ASSETS", "cfd": "CFD_ASSETS", "crypto": "ASSETS"}
+
+
+def my_assets() -> list:
+    return list(getattr(config, ASSET_KEYS[config.MARKET]))
+
+
+def save_my_assets(items: list):
+    config.save({ASSET_KEYS[config.MARKET]: items})
+
+
+@app.get("/api/assets")
+def assets_list():
+    meta = assets_mod.load_meta()
+    from bot.catalog import CFD_CATALOG, CFD_SPECS
+    mine = [{"symbol": s, "name": assets_mod.CATALOG_NAMES.get(s) or assets_mod.CRYPTO_NAMES.get(s)
+             or (CFD_SPECS.get(s) or {}).get("name"), **meta.get(s, {})} for s in my_assets()]
+    if config.MARKET == "cfd":
+        cats = [{"key": k, "label": label, "symbols": syms, "enabled": k in config.CFD_CATEGORIES,
+                 "names": {x: CFD_SPECS[x]["name"] for x in syms}} for k, (label, syms) in CFD_CATALOG.items()]
+        return {"market": "cfd", "currency": config.CFD_CURRENCY, "mine": mine, "categories": cats, "discovery": None,
+                "discoveries": [], "universe_size": len(config.CFD_UNIVERSE), "scan_top": config.SCAN_UNIVERSE,
+                "max": MAX_MY_ASSETS, "broker": ctrader.any_session() is not None}
+    if config.MARKET == "stocks":
+        cats = [{"key": k, "label": label, "symbols": syms, "enabled": k in config.STOCK_CATEGORIES}
+                for k, (label, syms) in assets_mod.STOCK_CATALOG.items()]
+        try:
+            disc = ui._md().discoveries()
+        except Exception:
+            disc = []
+        return {"market": "stocks", "currency": config.STOCK_CURRENCY, "mine": mine, "categories": cats,
+                "discovery": config.STOCK_DISCOVERY, "discoveries": disc, "universe_size": len(config.STOCK_UNIVERSE),
+                "scan_top": config.SCAN_UNIVERSE, "max": MAX_MY_ASSETS}
+    cats = [{"key": k, "label": label, "symbols": syms} for k, (label, syms) in assets_mod.CRYPTO_CATALOG.items()]
+    return {"market": "crypto", "quote": config.QUOTE, "mine": mine, "catalog": cats,
+            "scan_top": config.SCAN_UNIVERSE, "max": MAX_MY_ASSETS}
+
+
+@app.get("/api/assets/search")
+def assets_search(q: str = ""):
+    mine = set(my_assets())
+    if config.MARKET == "cfd":
+        rows = assets_mod.search_cfd(q)
+    elif config.MARKET == "stocks":
+        rows = assets_mod.search_stocks(q)
+    else:
+        rows = assets_mod.search_crypto(ui._md(), q, config.QUOTE)
+    for r in rows:
+        r["in_list"] = r["symbol"] in mine
+    return {"results": rows}
+
+
+@app.post("/api/assets/add")
+def assets_add(payload: dict = Body(...)):
+    raw = str(payload.get("symbol") or "").strip().upper()
+    if not raw or not TICKER_RX.match(raw.split("/")[0]):
+        raise ValueError("Símbolo inválido.")
+    items = my_assets()
+    if len(items) >= MAX_MY_ASSETS:
+        raise ValueError(f"No máximo {MAX_MY_ASSETS} ativos na tua lista.")
+    if config.MARKET == "cfd":
+        res = assets_mod.validate_cfd(raw, ui._md())
+    elif config.MARKET == "stocks":
+        res = assets_mod.validate_stock(raw, ui._md(), t212_lookup())
+    else:
+        res = assets_mod.validate_crypto(raw, ui._md(), config.QUOTE)
+    if not res["ok"]:
+        return res
+    sym = res["symbol"]
+    if sym not in items:
+        save_my_assets(items + [sym])
+    assets_mod.save_meta(sym, {**res, "note": "; ".join(res["warnings"]) or None})
+    log.info("Ativo adicionado à tua lista: %s (%s)", sym, res.get("name"))
+    return res
+
+
+@app.post("/api/assets/remove")
+def assets_remove(payload: dict = Body(...)):
+    sym = str(payload.get("symbol") or "").strip().upper()
+    items = [s for s in my_assets() if s != sym]
+    save_my_assets(items)
+    log.info("Ativo removido da tua lista: %s (posições abertas não são afetadas)", sym)
+    return {"ok": True}
+
+
+@app.post("/api/assets/categories")
+def assets_categories(payload: dict = Body(...)):
+    from bot.catalog import CFD_CATALOG
+    cfd = config.MARKET == "cfd"
+    catalog = CFD_CATALOG if cfd else assets_mod.STOCK_CATALOG
+    values = {}
+    if "categories" in payload:
+        cats = [c for c in payload["categories"] if c in catalog]
+        if not cats:
+            raise ValueError("Escolhe pelo menos uma categoria.")
+        values["CFD_CATEGORIES" if cfd else "STOCK_CATEGORIES"] = cats
+    if "discovery" in payload and not cfd and payload["discovery"] is not None:
+        values["STOCK_DISCOVERY"] = bool(payload["discovery"])
+    config.save(values)
+    return {"ok": True, "universe_size": len(config.CFD_UNIVERSE if cfd else config.STOCK_UNIVERSE)}
 
 
 @app.get("/api/settings")
@@ -630,10 +933,11 @@ def save_settings(payload: dict = Body(...)):
             if bad:
                 raise ValueError(f"Ativos não encontrados no Yahoo Finance: {', '.join(bad)}")
             values[key] = items
-    if values.get("STOCK_CURRENCY", config.STOCK_CURRENCY) != config.STOCK_CURRENCY and config.MARKET == "stocks":
-        st = controller.snapshot["state"]
-        if st["positions"] or st.get("pending"):
-            raise ValueError("Fecha as posições antes de mudar a moeda da conta.")
+    for key, market in (("STOCK_CURRENCY", "stocks"), ("CFD_CURRENCY", "cfd")):
+        if values.get(key, getattr(config, key)) != getattr(config, key) and config.MARKET == market:
+            st = controller.snapshot["state"]
+            if st["positions"] or st.get("pending"):
+                raise ValueError("Fecha as posições antes de mudar a moeda da conta.")
     if "ASSETS" in payload:
         markets = ui.markets() if config.MARKET == "crypto" else {}
         assets = [a.strip().upper() for a in dict.fromkeys(payload["ASSETS"]) if isinstance(a, str) and a.strip()]

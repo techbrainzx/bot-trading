@@ -10,8 +10,8 @@ import ccxt
 import config
 from . import indicators as ind
 from .analysis import price_fmt
-from .broker import PositionGone
-from .risk import RiskManager, exit_level, round_trip_cost, update_trailing
+from .broker import OrderError, PositionGone
+from .risk import SHORT_ACTIONS, RiskManager, exit_level, round_trip_cost, sgn, side_of, update_trailing
 
 log = logging.getLogger("bot")
 
@@ -100,7 +100,16 @@ def setup_score_adjust(trades: list, setup: str) -> int:
     return 5 if avg_r > 0.3 else -10 if avg_r < -0.3 else 0
 
 
-def dynamic_risk_multiplier(trades: list, setup: str | None, regime_state: str | None = None) -> tuple[float, str]:
+def position_value(pos: dict, price: float, fx: float | None = None) -> float:
+    """Valor atual da posição na moeda da conta. CFD: margem + lucro/prejuízo por realizar."""
+    fx = pos.get("fx", 1.0) if fx is None else fx
+    if pos.get("cfd"):
+        return pos.get("margin", 0.0) + sgn(side_of(pos)) * pos["qty"] * (price - pos["entry_price"]) * fx
+    return pos["qty"] * price * fx
+
+
+def dynamic_risk_multiplier(trades: list, setup: str | None, regime_state: str | None = None,
+                            side: str = "long") -> tuple[float, str]:
     """Ajusta o tamanho do risco: menos depois de perdas seguidas, em setups fracos ou em mercado mau."""
     mult, notes = 1.0, []
     streak = trade_stats(trades)["loss_streak"]
@@ -117,22 +126,23 @@ def dynamic_risk_multiplier(trades: list, setup: str | None, regime_state: str |
             elif avg_r > 0.5 and len(rows) >= 6:
                 mult *= 1.2
                 notes.append(f"setup com bons resultados ({avg_r:+.2f}R): risco a 120%")
-    if regime_state == "risk_off":
+    if regime_state == "risk_off" and side == "long":
         mult *= 0.7
         notes.append("mercado desfavorável: risco a 70%")
     return max(0.3, min(1.25, mult)), "; ".join(notes)
 
 
 class Trader:
-    def __init__(self, state, broker, risk: RiskManager, journal=None, currency: str | None = None):
+    def __init__(self, state, broker, risk: RiskManager, journal=None, currency: str | None = None, cfd: bool = False):
         self.state = state
         self.broker = broker
         self.risk = risk
         self.journal = journal
         self.currency = currency or config.QUOTE
+        self.cfd = cfd                               # CFDs: margem, compra e venda a descoberto
         # ganchos definidos pelo motor (valores por defeito servem para cripto e backtests)
         self.fx = lambda symbol: 1.0                 # moeda do instrumento -> moeda da conta
-        self.risk_mult = lambda symbol, setup: (1.0, "")
+        self.risk_mult = lambda symbol, setup, side="long": (1.0, "")
         self.entry_gate = lambda symbol, now: None   # motivo para NÃO entrar agora (eventos, resultados, bolsa fechada)
 
     @property
@@ -146,7 +156,7 @@ class Trader:
     def equity(self, prices: dict) -> float:
         total = self.state.data["cash"]
         for sym, pos in self.positions.items():
-            total += pos["qty"] * prices.get(sym, pos["entry_price"]) * self.fx(sym)
+            total += position_value(pos, prices.get(sym, pos["entry_price"]), self.fx(sym))
         return total
 
     def update_risk_state(self, equity: float, now: datetime):
@@ -168,17 +178,21 @@ class Trader:
         pos = self.positions.get(symbol)
         if not pos:
             return None
-        risk_unit = pos["entry_price"] - pos["initial_stop"]
+        side = side_of(pos)
+        s = sgn(side)
+        risk_unit = s * (pos["entry_price"] - pos["initial_stop"])
         opened = datetime.fromisoformat(pos["opened_at"])
+        best = pos.get("highest") if s > 0 else pos.get("lowest")
         return {
+            "side": side,
             "entry_price": price_fmt(pos["entry_price"]),
             "current_stop_loss": price_fmt(pos["stop"]),
             "initial_stop_loss": price_fmt(pos["initial_stop"]),
             "take_profit": price_fmt(pos["take_profit"]),
-            "highest_since_entry": price_fmt(pos["highest"]),
+            ("highest_since_entry" if s > 0 else "lowest_since_entry"): price_fmt(best or pos["entry_price"]),
             "hours_open": round((now - opened).total_seconds() / 3600, 1),
-            "unrealized_pnl_pct": round((price / pos["entry_price"] - 1) * 100, 2),
-            "r_multiple_now": round((price - pos["entry_price"]) / risk_unit, 2) if risk_unit > 0 else None,
+            "unrealized_pnl_pct": round(s * (price / pos["entry_price"] - 1) * 100, 2),
+            "r_multiple_now": round(s * (price - pos["entry_price"]) / risk_unit, 2) if risk_unit > 0 else None,
             "partial_profit_taken": bool(pos.get("partial_done")),
             "let_winner_run": bool(pos.get("let_run")),
             "automatic_exit_rules": pos.get("rules_note"),
@@ -190,7 +204,7 @@ class Trader:
         if not o:
             return None
         return {
-            "type": o["type"], "entry_price": price_fmt(o["trigger"]), "stop_loss": price_fmt(o["stop"]),
+            "type": o["type"], "side": side_of(o), "entry_price": price_fmt(o["trigger"]), "stop_loss": price_fmt(o["stop"]),
             "take_profit": price_fmt(o["take_profit"]), "created_at": o["created"], "expires_at": o["expires"],
             "distance_from_price_pct": round((o["trigger"] / price - 1) * 100, 2),
         }
@@ -215,8 +229,8 @@ class Trader:
 
     def recent_trades(self, symbol: str, n: int = 5) -> list:
         trades = [t for t in group_trades(self.state.data["trades"]) if t["symbol"] == symbol][-n:]
-        return [{"closed_at": t["closed_at"], "pnl": round(t["pnl"], 2), "r_multiple": t["r_multiple"],
-                 "reason": t["reason"], "setup": t.get("setup")} for t in trades]
+        return [{"closed_at": t["closed_at"], "side": t.get("side", "long"), "pnl": round(t["pnl"], 2),
+                 "r_multiple": t["r_multiple"], "reason": t["reason"], "setup": t.get("setup")} for t in trades]
 
     # ------------------------------------------------------------------ execução
     def _cash_available(self) -> float:
@@ -224,56 +238,67 @@ class Trader:
         live_cash = self.broker.available_quote()
         return min(cash, live_cash) if live_cash is not None else cash
 
-    def _plan(self, symbol, d, entry_price, atr, spread_pct, prices, setup):
-        mult, mult_note = self.risk_mult(symbol, setup)
+    def _plan(self, symbol, d, entry_price, atr, spread_pct, prices, setup, side="long"):
+        mult, mult_note = self.risk_mult(symbol, setup, side)
+        spec = self.broker.spec(symbol) if self.cfd else None
         plan, note = self.risk.plan_entry(d, entry_price, atr, self.equity(prices), self._cash_available(), spread_pct,
-                                          self.broker.min_order_value(symbol), fx=self.fx(symbol), risk_mult=mult)
+                                          self.broker.min_order_value(symbol), fx=self.fx(symbol), risk_mult=mult,
+                                          side=side, spec=spec)
         if plan and mult_note:
             note = "; ".join(x for x in (note, mult_note) if x)
         return plan, note
 
-    def _try_entry(self, symbol, d, entry_price, atr, spread_pct, prices, now, setup=None) -> str:
+    def _try_entry(self, symbol, d, entry_price, atr, spread_pct, prices, now, setup=None, side="long") -> str:
         equity = self.equity(prices)
         blocker = self.risk.entry_blocker(symbol, self.state.data, equity, len(self.positions), now) \
             or self.entry_gate(symbol, now)
         if blocker:
             return f"bloqueado: {blocker}"
-        plan, note = self._plan(symbol, d, entry_price, atr, spread_pct, prices, setup)
+        plan, note = self._plan(symbol, d, entry_price, atr, spread_pct, prices, setup, side)
         if plan is None:
             return f"rejeitado pelo gestor de risco: {note}"
-        return self.open_position(symbol, plan, d, atr, now, note, setup)
+        try:
+            return self.open_position(symbol, plan, d, atr, now, note, setup)
+        except OrderError as e:
+            log.error("%s: ordem recusada (%s)", symbol, e)
+            return f"ordem recusada pela corretora: {e}"
 
     def apply_decision(self, symbol, d, price, atr, spread_pct, prices, now, setup=None) -> str:
         pos = self.positions.get(symbol)
         pend = self.pending.get(symbol)
-        if d.action in ("BUY", "BUY_LIMIT", "BUY_STOP") and pos:
+        if d.action in ("BUY", "BUY_LIMIT", "BUY_STOP") + SHORT_ACTIONS and pos:
             return "ignorado: já existe posição aberta"
+        if d.action in SHORT_ACTIONS and not (self.cfd and config.CFD_ALLOW_SHORT):
+            return "ignorado: vendas a descoberto desligadas"
+        side = side_of(d.action)
 
-        if d.action == "BUY":
+        if d.action in ("BUY", "SHORT"):
             self.pending.pop(symbol, None)
-            return self._try_entry(symbol, d, price, atr, spread_pct, prices, now, setup)
+            return self._try_entry(symbol, d, price, atr, spread_pct, prices, now, setup, side)
 
-        if d.action in ("BUY_LIMIT", "BUY_STOP"):
+        if d.action in ("BUY_LIMIT", "BUY_STOP", "SHORT_LIMIT", "SHORT_STOP"):
             problem = self.risk.check_pending(d, price, atr)
             if problem:
                 return f"ordem pendente rejeitada: {problem}"
-            plan, note = self._plan(symbol, d, d.entry_price, atr, None, prices, setup)
+            plan, note = self._plan(symbol, d, d.entry_price, atr, None, prices, setup, side)
             if plan is None:
                 return f"ordem pendente rejeitada: {note}"
             tf_s = ccxt.Exchange.parse_timeframe(config.PRIMARY_TIMEFRAME)
             expires = now + timedelta(seconds=tf_s * config.PENDING_ORDER_CANDLES)
             self.pending[symbol] = {
-                "symbol": symbol, "type": d.action, "trigger": d.entry_price, "stop": plan.stop,
+                "symbol": symbol, "type": d.action, "side": side, "trigger": d.entry_price, "stop": plan.stop,
                 "take_profit": plan.take_profit, "confidence": d.confidence, "reasoning": d.reasoning[:500],
                 "created": iso(now), "expires": iso(expires), "atr": atr, "setup": setup,
             }
             self.state.save()
-            verb = "descer até" if d.action == "BUY_LIMIT" else "subir até"
+            verb = {"BUY_LIMIT": "comprar se o preço descer até", "BUY_STOP": "comprar se o preço subir até",
+                    "SHORT_LIMIT": "vender a descoberto se o preço subir até",
+                    "SHORT_STOP": "vender a descoberto se o preço descer até"}[d.action]
             log.info("%s: ordem pendente %s a %.6g (stop %.6g, alvo %.6g)", symbol, d.action, d.entry_price,
                      plan.stop, plan.take_profit)
-            return f"ordem pendente: comprar se o preço {verb} {d.entry_price:.6g} (stop {plan.stop:.6g}, alvo {plan.take_profit:.6g})"
+            return f"ordem pendente: {verb} {d.entry_price:.6g} (stop {plan.stop:.6g}, alvo {plan.take_profit:.6g})"
 
-        if d.action == "SELL":
+        if d.action in ("SELL", "CLOSE"):
             if pos:
                 if d.confidence < config.MIN_EXIT_CONFIDENCE:
                     return f"ignorado: confiança de saída baixa ({d.confidence:.2f})"
@@ -282,7 +307,7 @@ class Trader:
             if pend:
                 self.cancel_pending(symbol, "cancelada pela IA")
                 return "ordem pendente cancelada"
-            return "ignorado: sem posição (spot, só compras)"
+            return "ignorado: sem posição" + ("" if self.cfd else " (spot, só compras)")
 
         if pos and d.new_stop_loss:
             new = self.risk.validate_stop_update(pos, d.new_stop_loss, price, atr)
@@ -290,9 +315,10 @@ class Trader:
                 old = pos["stop"]
                 pos["stop"] = new
                 self.state.save()
-                log.info("%s: IA subiu o stop %.6g -> %.6g", symbol, old, new)
-                return f"stop subido {old:.6g} -> {new:.6g}"
-            return f"novo stop {d.new_stop_loss:.6g} recusado (tem de subir e ficar afastado do preço)"
+                log.info("%s: IA apertou o stop %.6g -> %.6g", symbol, old, new)
+                return f"stop apertado {old:.6g} -> {new:.6g}"
+            where = "subir" if side_of(pos) == "long" else "descer"
+            return f"novo stop {d.new_stop_loss:.6g} recusado (tem de {where} e ficar afastado do preço)"
         return "sem ação (ordem pendente mantida)" if pend else "sem ação"
 
     def cancel_pending(self, symbol: str, reason: str):
@@ -312,27 +338,33 @@ class Trader:
             self.cancel_pending(symbol, "expirou")
             return "expirada"
         trig = o["trigger"]
-        if o["type"] == "BUY_LIMIT":
+        side = side_of(o)
+        s = sgn(side)
+        kind = o["type"]
+        if kind in ("BUY_LIMIT", "SHORT_STOP"):   # dispara quando o preço DESCE até ao gatilho
             if low > trig:
                 return None
             fill = min(open_, trig)
-        else:
+            if kind == "SHORT_STOP" and fill < trig - 0.5 * o["atr"]:
+                self.cancel_pending(symbol, "o preço caiu demasiado abaixo do disparo")
+                return "cancelada"
+        else:                                      # BUY_STOP / SHORT_LIMIT: quando o preço SOBE até ao gatilho
             if high < trig:
                 return None
             fill = max(open_, trig)
-            if fill > trig + 0.5 * o["atr"]:
+            if kind == "BUY_STOP" and fill > trig + 0.5 * o["atr"]:
                 self.cancel_pending(symbol, "o preço saltou demasiado acima do disparo")
                 return "cancelada"
-        if fill <= o["stop"]:
-            self.cancel_pending(symbol, "o preço já está abaixo do stop")
+        if s * (fill - o["stop"]) <= 0:
+            self.cancel_pending(symbol, "o preço já passou o stop")
             return "cancelada"
         gate = self.entry_gate(symbol, now)
         if gate:
             return None  # espera (ex.: evento macro) sem cancelar; a ordem expira sozinha
         del self.pending[symbol]
-        d = SimpleNamespace(action="BUY", confidence=o["confidence"], stop_loss=o["stop"],
-                            take_profit=o["take_profit"], reasoning=o["reasoning"])
-        outcome = self._try_entry(symbol, d, fill, o["atr"], None, {**prices, symbol: fill}, now, o.get("setup"))
+        d = SimpleNamespace(action="SHORT" if side == "short" else "BUY", confidence=o["confidence"],
+                            stop_loss=o["stop"], take_profit=o["take_profit"], reasoning=o["reasoning"])
+        outcome = self._try_entry(symbol, d, fill, o["atr"], None, {**prices, symbol: fill}, now, o.get("setup"), side)
         self.state.save()
         log.info("%s: ordem %s disparada a %.6g -> %s", symbol, o["type"], fill, outcome)
         if self.journal:
@@ -340,22 +372,30 @@ class Trader:
         return outcome
 
     def open_position(self, symbol, plan, d, atr, now, note="", setup=None) -> str:
-        fill = self.broker.buy(symbol, plan.qty, plan.price)
-        entry_cost = -fill.cash_delta
+        side = getattr(plan, "side", "long")
+        s = sgn(side)
         fx = self.fx(symbol)
+        if self.cfd:
+            fill = self.broker.open(symbol, side, plan.qty, plan.price, plan.stop, plan.take_profit)
+        else:
+            fill = self.broker.buy(symbol, plan.qty, plan.price)
+        entry_cost = -fill.cash_delta
         self.state.data["cash"] += fill.cash_delta
-        risk_amount = max(entry_cost - fill.qty * plan.stop * fx, 1e-9)
-        self.positions[symbol] = {
+        stop = fill.stop if (self.cfd and fill.stop) else plan.stop
+        risk_amount = max(fill.qty * s * (fill.price - stop) * fx + fill.fee, 1e-9)
+        pos = {
             "id": uuid.uuid4().hex[:12],
             "symbol": symbol,
+            "side": side,
             "qty": fill.qty,
             "entry_price": fill.price,
             "entry_cost": entry_cost,
-            "stop": plan.stop,
-            "initial_stop": plan.stop,
+            "stop": stop,
+            "initial_stop": stop,
             "take_profit": plan.take_profit,
             "atr_at_entry": atr,
             "highest": fill.price,
+            "lowest": fill.price,
             "opened_at": iso(now),
             "risk_amount": risk_amount,
             "risk_initial": risk_amount,
@@ -366,16 +406,22 @@ class Trader:
             "fx": fx,
             "trail_mult": config.TRAIL_ATR_MULT,
         }
+        if self.cfd:
+            pos.update(cfd=True, margin=fill.margin, position_id=fill.order_id, broker_stop=stop, swap=0.0)
+        self.positions[symbol] = pos
         self.state.save()
+        verb = "VENDA A DESCOBERTO" if side == "short" else "COMPRA"
         log.info(
-            "COMPRA %s: %.6g @ %.6g (%.2f %s) | stop %.6g | TP %.6g | R:R %.2f | conf %.2f",
-            symbol, fill.qty, fill.price, entry_cost, self.currency, plan.stop, plan.take_profit, plan.risk_reward,
-            d.confidence,
+            "%s %s: %.6g @ %.6g (%.2f %s%s) | stop %.6g | TP %.6g | R:R %.2f | conf %.2f",
+            verb, symbol, fill.qty, fill.price, entry_cost, self.currency, " de margem" if self.cfd else "", stop,
+            plan.take_profit, plan.risk_reward, d.confidence,
         )
         if self.journal:
-            self.journal.event("BUY", symbol, {"qty": fill.qty, "price": fill.price, "cost": entry_cost,
-                                               "stop": plan.stop, "take_profit": plan.take_profit})
-        msg = f"COMPRADO {fill.qty:.6g} @ {fill.price:.6g} (stop {plan.stop:.6g}, TP {plan.take_profit:.6g})"
+            self.journal.event("SHORT" if side == "short" else "BUY", symbol,
+                               {"qty": fill.qty, "price": fill.price, "cost": entry_cost, "stop": stop,
+                                "take_profit": plan.take_profit})
+        word = "VENDIDO (short)" if side == "short" else "COMPRADO"
+        msg = f"{word} {fill.qty:.6g} @ {fill.price:.6g} (stop {stop:.6g}, TP {plan.take_profit:.6g})"
         return f"{msg} [{note}]" if note else msg
 
     def _record_trade(self, pos, fill, reason, now, cost_part, risk_part, partial) -> dict:
@@ -384,6 +430,7 @@ class Trader:
         trade = {
             "trade_id": pos.get("id"),
             "symbol": pos["symbol"],
+            "side": side_of(pos),
             "opened_at": pos["opened_at"],
             "closed_at": iso(now),
             "hours": round((now - opened).total_seconds() / 3600, 1),
@@ -403,15 +450,24 @@ class Trader:
             self.journal.trade(trade)
         return trade
 
+    def _exit(self, symbol, pos, qty, price):
+        if self.cfd:
+            return self.broker.close(symbol, pos, qty, price)
+        return self.broker.sell(symbol, qty, price)
+
     def close_position(self, symbol, reason, price, now) -> dict | None:
         pos = self.positions[symbol]
         try:
-            fill = self.broker.sell(symbol, pos["qty"], price)
+            fill = self._exit(symbol, pos, pos["qty"], price)
         except PositionGone as e:
-            log.error("Posição %s removida do registo: %s", symbol, e)
-            del self.positions[symbol]
-            self.state.save()
-            return None
+            fill = self.broker.recover_close(symbol, pos) if self.cfd else None
+            if fill is None:
+                log.error("Posição %s removida do registo: %s", symbol, e)
+                del self.positions[symbol]
+                self.state.save()
+                return None
+            reason = self.broker_reason(pos, fill.price)
+            log.warning("%s: já tinha sido fechada na corretora (%s); a registar o resultado real.", symbol, reason)
         self.state.data["cash"] += fill.cash_delta
         trade = self._record_trade(pos, fill, reason, now, pos["entry_cost"], pos["risk_amount"], False)
         del self.positions[symbol]
@@ -420,39 +476,97 @@ class Trader:
         if total < 0 and config.COOLDOWN_AFTER_LOSS_MINUTES:
             self.state.data["cooldowns"][symbol] = iso(now + timedelta(minutes=config.COOLDOWN_AFTER_LOSS_MINUTES))
         self.state.save()
-        log.info("VENDA %s (%s): @ %.6g | PnL %+.2f %s (%+.2f%%, %+.2fR)",
-                 symbol, reason, fill.price, trade["pnl"], self.currency, trade["pnl_pct"], trade["r_multiple"])
+        log.info("%s %s (%s): @ %.6g | PnL %+.2f %s (%+.2f%%, %+.2fR)",
+                 "FECHO" if self.cfd else "VENDA", symbol, reason, fill.price, trade["pnl"], self.currency,
+                 trade["pnl_pct"], trade["r_multiple"])
         return trade
 
+    @staticmethod
+    def broker_reason(pos, exit_price) -> str:
+        """Porque fechou na corretora (stop/alvo), a partir do preço de saída."""
+        tol = 0.25 * (pos.get("atr_at_entry") or 0) or exit_price * 0.0005
+        if abs(exit_price - pos["stop"]) <= tol:
+            return "stop_loss" if sgn(side_of(pos)) * (pos["stop"] - pos["entry_price"]) < 0 else "trailing_stop"
+        if pos.get("take_profit") and abs(exit_price - pos["take_profit"]) <= tol:
+            return "take_profit"
+        return "corretora"
+
+    def sync_broker(self, now) -> list:
+        """CFDs no Modo Real: regista as posições que a corretora fechou (stop na corretora, stop-out, fecho
+        à mão) e leva para lá o stop atual do bot (break-even, trailing, estrutural)."""
+        if not self.cfd:
+            return []
+        closed = []
+        for symbol in self.broker.gone(self.positions):
+            pos = self.positions[symbol]
+            fill = self.broker.recover_close(symbol, pos)
+            if fill is None:
+                log.error("%s: a posição já não existe na corretora e o fecho não foi encontrado; removida do registo.",
+                          symbol)
+                del self.positions[symbol]
+                continue
+            self.state.data["cash"] += fill.cash_delta
+            reason = self.broker_reason(pos, fill.price)
+            trade = self._record_trade(pos, fill, reason, now, pos["entry_cost"], pos["risk_amount"], False)
+            del self.positions[symbol]
+            if trade["pnl"] < 0 and config.COOLDOWN_AFTER_LOSS_MINUTES:
+                self.state.data["cooldowns"][symbol] = iso(now + timedelta(minutes=config.COOLDOWN_AFTER_LOSS_MINUTES))
+            log.info("FECHO NA CORRETORA %s (%s): @ %.6g | PnL %+.2f %s", symbol, reason, fill.price, trade["pnl"],
+                     self.currency)
+            closed.append(trade)
+        for symbol, pos in self.positions.items():
+            if pos.get("broker_stop") is not None and abs(pos["stop"] - pos["broker_stop"]) > 1e-9:
+                if self.broker.amend(symbol, pos):
+                    pos["broker_stop"] = pos["stop"]
+                    log.info("%s: stop atualizado na corretora para %.6g", symbol, pos["stop"])
+        self.state.save()
+        return closed
+
     def partial_close(self, symbol, fraction, price, now, reason="parcial") -> dict | None:
-        """Vende uma parte da posição (ex.: 50% ao ganhar 1R) e protege o resto no preço de entrada."""
+        """Fecha uma parte da posição (ex.: 50% ao ganhar 1R) e protege o resto no preço de entrada."""
         pos = self.positions[symbol]
         pos["partial_done"] = True
+        s = sgn(side_of(pos))
         qty = pos["qty"] * fraction
-        breakeven = pos["entry_price"] + round_trip_cost(pos["entry_price"])
-        min_value = self.broker.min_order_value(symbol)
-        remaining_value = (pos["qty"] - qty) * price * self.fx(symbol)
-        if qty * price * self.fx(symbol) < min_value or remaining_value < min_value:
-            pos["stop"] = max(pos["stop"], breakeven)  # demasiado pequena para dividir: só protege
+        breakeven = pos["entry_price"] + s * round_trip_cost(pos["entry_price"])
+
+        def protect(stop):
+            return max(stop, breakeven) if s > 0 else min(stop, breakeven)
+
+        if self.cfd:
+            spec = self.broker.spec(symbol)
+            step = spec.get("step") or 0
+            if step:
+                qty = round(math.floor(qty / step + 1e-9) * step, 8)
+            min_qty = spec.get("min_qty") or 0
+            too_small = qty < min_qty - 1e-12 or pos["qty"] - qty < min_qty - 1e-12
+        else:
+            min_value = self.broker.min_order_value(symbol)
+            remaining_value = (pos["qty"] - qty) * price * self.fx(symbol)
+            too_small = qty * price * self.fx(symbol) < min_value or remaining_value < min_value
+        if too_small or qty <= 0:
+            pos["stop"] = protect(pos["stop"])  # demasiado pequena para dividir: só protege
             self.state.save()
             return None
         try:
-            fill = self.broker.sell(symbol, qty, price)
-        except PositionGone as e:
-            log.error("Venda parcial de %s falhou: %s", symbol, e)
+            fill = self._exit(symbol, pos, qty, price)
+        except (PositionGone, OrderError) as e:
+            log.error("Fecho parcial de %s falhou: %s", symbol, e)
             self.state.save()
             return None
         part = fill.qty / pos["qty"]
         cost_part, risk_part = pos["entry_cost"] * part, pos["risk_amount"] * part
         self.state.data["cash"] += fill.cash_delta
         trade = self._record_trade(pos, fill, reason, now, cost_part, risk_part, True)
+        if self.cfd:
+            pos["margin"] -= pos.get("margin", 0.0) * part
         pos["qty"] -= fill.qty
         pos["entry_cost"] -= cost_part
         pos["risk_amount"] -= risk_part
-        pos["stop"] = max(pos["stop"], breakeven)
+        pos["stop"] = protect(pos["stop"])
         self.state.save()
-        log.info("VENDA PARCIAL %s: %.6g @ %.6g | PnL %+.2f %s | stop no preço de entrada",
-                 symbol, fill.qty, fill.price, trade["pnl"], self.currency)
+        log.info("%s PARCIAL %s: %.6g @ %.6g | PnL %+.2f %s | stop no preço de entrada",
+                 "FECHO" if self.cfd else "VENDA", symbol, fill.qty, fill.price, trade["pnl"], self.currency)
         return trade
 
     def check_exit(self, symbol, open_, high, low, now) -> dict | None:
@@ -474,16 +588,18 @@ class Trader:
             hit = None
         if hit:
             return self.close_position(symbol, hit[0], hit[1], now)
+        s = sgn(side_of(pos))
         if config.PARTIAL_TP_PCT and not pos.get("partial_done"):
-            r = pos["entry_price"] - pos["initial_stop"]
-            level = pos["entry_price"] + config.PARTIAL_TP_R * r
-            if r > 0 and high >= level:
-                self.partial_close(symbol, config.PARTIAL_TP_PCT / 100, max(level, open_), now)
+            r = s * (pos["entry_price"] - pos["initial_stop"])
+            level = pos["entry_price"] + s * config.PARTIAL_TP_R * r
+            if r > 0 and ((s > 0 and high >= level) or (s < 0 and low <= level)):
+                fill_at = max(level, open_) if s > 0 else min(level, open_)
+                self.partial_close(symbol, config.PARTIAL_TP_PCT / 100, fill_at, now)
                 pos = self.positions.get(symbol)
                 if not pos:
                     return None
-        if update_trailing(pos, high):
-            log.info("%s: stop automático subiu para %.6g", symbol, pos["stop"])
+        if update_trailing(pos, high, low):
+            log.info("%s: stop automático %s para %.6g", symbol, "subiu" if s > 0 else "desceu", pos["stop"])
             self.state.save()
         return None
 
@@ -498,7 +614,8 @@ class Trader:
         adx = float(ind.adx(df)[0].iloc[-1])
         _, _, hist = ind.macd(df["close"])
         ema20 = float(ind.ema(df["close"], 20).iloc[-1])
-        r = pos["entry_price"] - pos["initial_stop"]
+        s = sgn(side_of(pos))
+        r = s * (pos["entry_price"] - pos["initial_stop"])
         notes = []
 
         # 1) trailing adaptado ao regime: largo em tendência forte, apertado em mercado lateral
@@ -508,26 +625,34 @@ class Trader:
             mult = min(mult, 1.5)
         pos["trail_mult"] = mult
 
-        # 2) stop estrutural: abaixo do último fundo confirmado, quando o trade já está a ganhar
-        if r > 0 and price >= pos["entry_price"] + config.TRAIL_START_R * r:
-            lows = df["low"].tail(40)
-            pivots = lows[(lows == lows.rolling(7, center=True).min())].dropna()
-            cands = [float(v) for v in pivots if float(v) < price - 0.5 * atr]
-            if cands:
-                new = cands[-1] - 0.2 * atr
-                if new > pos["stop"]:
-                    notes.append(f"stop estrutural {pos['stop']:.6g} -> {new:.6g}")
-                    pos["stop"] = new
+        # 2) stop estrutural: para lá do último fundo (compra) ou topo (venda) confirmado, com o trade já a ganhar
+        if r > 0 and s * (price - pos["entry_price"]) >= config.TRAIL_START_R * r:
+            if s > 0:
+                lows = df["low"].tail(40)
+                pivots = lows[(lows == lows.rolling(7, center=True).min())].dropna()
+                cands = [float(v) for v in pivots if float(v) < price - 0.5 * atr]
+                new = cands[-1] - 0.2 * atr if cands else None
+            else:
+                highs = df["high"].tail(40)
+                pivots = highs[(highs == highs.rolling(7, center=True).max())].dropna()
+                cands = [float(v) for v in pivots if float(v) > price + 0.5 * atr]
+                new = cands[-1] + 0.2 * atr if cands else None
+            if new is not None and s * (new - pos["stop"]) > 0:
+                notes.append(f"stop estrutural {pos['stop']:.6g} -> {new:.6g}")
+                pos["stop"] = new
 
-        # 3) deixar correr os vencedores quando a tendência está forte e a acelerar
-        pos["let_run"] = bool(adx >= 28 and hist.iloc[-1] > hist.iloc[-2] and price > ema20)
+        # 3) deixar correr os vencedores quando a tendência (a favor da posição) está forte e a acelerar
+        if s > 0:
+            pos["let_run"] = bool(adx >= 28 and hist.iloc[-1] > hist.iloc[-2] and price > ema20)
+        else:
+            pos["let_run"] = bool(adx >= 28 and hist.iloc[-1] < hist.iloc[-2] and price < ema20)
 
         # 4) stop por tempo: capital parado num trade que não anda
         opened = datetime.fromisoformat(pos["opened_at"])
         tf_s = ccxt.Exchange.parse_timeframe(config.PRIMARY_TIMEFRAME)
         candles_open = (now - opened).total_seconds() / tf_s
         if config.TIME_STOP_CANDLES and candles_open >= config.TIME_STOP_CANDLES and r > 0 \
-                and (price - pos["entry_price"]) / r < 0.3 and not pos.get("partial_done"):
+                and s * (price - pos["entry_price"]) / r < 0.3 and not pos.get("partial_done"):
             self.close_position(symbol, "sem_progresso", price, now)
             return f"fechada por falta de progresso ao fim de {candles_open:.0f} velas"
 

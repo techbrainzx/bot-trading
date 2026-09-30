@@ -1,6 +1,6 @@
 # Trading Bot IA
 
-Aplicação de trading automático de criptomoedas (Binance spot, só compras, sem alavancagem). A IA da OpenAI decide **comprar / vender / esperar** e um gestor de risco com regras fixas, que a IA não consegue ultrapassar, controla tudo o que é executado.
+Aplicação de trading automático em três mercados: criptomoedas (Binance), ações e ETFs (Trading 212) e CFDs de ouro, prata, forex, índices e petróleo (cTrader, com compra **e venda a descoberto**). A IA da OpenAI decide **comprar / vender / esperar** e um gestor de risco com regras fixas, que a IA não consegue ultrapassar, controla tudo o que é executado.
 
 > **Aviso:** nenhum bot, com ou sem IA, prevê o mercado de forma fiável. O trading tem risco real de perda. Começa sempre pelo **Modo Teste** e usa só dinheiro que possas perder.
 
@@ -18,20 +18,22 @@ Na primeira vez numa máquina nova: `pip install -r requirements.txt`.
 
 ## Mercados e modos
 
-No topo escolhes o **mercado** (Cripto ou Ações & ETFs) e o **modo** (Teste ou Real). Cada combinação tem a sua carteira e o seu histórico.
+No topo escolhes o **mercado** (Cripto, Ações & ETFs ou CFDs) e o **modo** (Teste ou Real). Cada combinação tem a sua carteira e o seu histórico.
 
-| | Cripto | Ações & ETFs |
-|---|---|---|
-| Corretora (Modo Real) | Binance (USDC; a UE não permite USDT) | Trading 212 (conta Invest, em EUR) |
-| Conta de teste da corretora | Binance Testnet | Conta demo da Trading 212 |
-| Dados | Binance | Yahoo Finance (grátis) |
-| Horário | 24/7 | Só com a bolsa aberta (Nova Iorque 14:30-21:00, Xetra 08:00-16:30, hora de Lisboa) |
-| O que negoceia | ~40 criptomoedas mais líquidas | ~32 ações americanas + ETFs europeus UCITS (os ETFs americanos como SPY/QQQ não são permitidos a particulares na UE) |
+| | Cripto | Ações & ETFs | CFDs |
+|---|---|---|---|
+| Corretora (Modo Real) | Binance (USDC; a UE não permite USDT) | Trading 212 (conta Invest, em EUR) | Qualquer corretora com cTrader (IC Markets, Pepperstone, FxPro...) |
+| Conta de teste da corretora | Binance Testnet | Conta demo da Trading 212 | Conta demo cTrader |
+| Dados | Binance | Yahoo Finance (grátis) | Modo Teste: Yahoo (futuros/índices/forex); Modo Real: a própria cTrader |
+| Horário | 24/7 | Só com a bolsa aberta (Nova Iorque 14:30-21:00, Xetra 08:00-16:30, hora de Lisboa) | Domingo 23h a sexta 22h (hora de Lisboa), quase 24h por dia |
+| O que negoceia | ~40 criptomoedas mais líquidas | ~100 ações e ETFs em 12 categorias | Ouro (XAU/USD), prata, 9 pares de forex, 8 índices, petróleo e gás |
+| Direção | Só compras | Só compras | Compra e venda a descoberto |
 
 **Ativar o Modo Real**: clica em "Modo Real" e segue os 3 passos:
-1. Chaves da corretora:
+1. Ligação à corretora:
    - **Binance:** a aplicação recusa chaves com levantamentos ativados;
-   - **Trading 212:** gera a chave na app (Definições › API) com permissão para colocar ordens.
+   - **Trading 212:** gera a chave na app (Definições › API) com permissão para colocar ordens;
+   - **cTrader:** cria uma aplicação grátis em openapi.ctrader.com com o Redirect URI que a janela mostra, cola o Client ID e o Secret, carrega em "Ligar ao cTrader", autoriza no browser e escolhe a conta. Nunca escreves a palavra-passe da corretora e a API não permite levantamentos.
 2. Capital máximo que o bot pode usar.
 3. Confirmação escrita "REAL".
 
@@ -50,11 +52,25 @@ Recomendo começar com a opção de conta demo.
    - reequilibra 1 vez por mês e vende logo um ETF que perca a média de 200 dias;
    - custo de IA zero e poucos trades.
 
-## Técnicas dinâmicas de compra e venda (os dois mercados)
+## CFDs (cTrader): ouro, forex, índices e petróleo
 
-- **Venda parcial:** ao ganhar 1R vende metade e põe o stop no preço de entrada (o trade já não pode dar prejuízo).
+- **XAU/USD e companhia:** os CFDs seguem o preço do ouro, das moedas, dos índices e do petróleo sem comprares o ativo. Ficas só com a **margem** presa (ex.: 5% no ouro e nos índices, 3,3% no forex principal, 10% no petróleo: limites da ESMA para particulares).
+- **Compra e venda a descoberto:** o bot aposta na subida em tendências de alta e na descida em tendências de baixa. Os setups de venda são os mesmos das compras, detetados no gráfico "espelhado". Podes desligar as vendas nas definições.
+- **O risco não depende da alavancagem:** cada trade é dimensionado pelo stop (ex.: arriscar 1% ou um valor fixo). A alavancagem só reduz o dinheiro preso.
+- **Stop-loss na própria corretora:** cada posição é aberta com stop na cTrader, por isso fica protegida mesmo com o PC desligado. O bot leva para lá o stop sempre que o aperta (break-even, trailing, estrutural). Se a corretora fechar uma posição, o bot regista o resultado real.
+- **Custos reais:** spread, comissão e financiamento noturno (swap, 3 noites à quarta-feira). No Modo Teste são simulados.
+- **Fim de semana:** fecha tudo à sexta às 20:30 UTC e não abre posições novas depois das 19:00 UTC (evita os saltos de segunda-feira; desligável).
+- **Eventos macro por moeda:** a pausa antes da Fed/BCE/emprego/inflação aplica-se às moedas de cada instrumento (EUR/USD pára no BCE e na Fed; o DAX no BCE).
+- **Tamanhos mínimos:** o ouro tem mínimo de 1 onça (cerca de 3 700 € de exposição e 185 € de margem). Com contas pequenas, o bot salta o que não cabe no risco por trade e usa forex (mínimo de 1000 unidades).
+- **Notícias:** 11 fontes de forex, matérias-primas e macro (FXStreet, investingLive/ForexLive, Investing.com, OilPrice, WSJ...) e ainda o dólar (DXY), os juros a 10 anos, o VIX, o S&P 500, o ouro e o petróleo em tempo real.
+
+> Os CFDs são produtos complexos e alavancados. Pelos avisos obrigatórios das corretoras na UE, a maioria dos clientes particulares perde dinheiro com eles. Testa primeiro no Modo Teste e depois numa conta demo.
+
+## Técnicas dinâmicas de compra e venda (todos os mercados)
+
+- **Fecho parcial:** ao ganhar 1R fecha metade e põe o stop no preço de entrada (o trade já não pode dar prejuízo).
 - **Trailing stop adaptado ao regime:** mais largo em tendência forte (ADX ≥ 30) e mais apertado em mercado lateral.
-- **Stop estrutural:** sobe para baixo do último fundo mais alto.
+- **Stop estrutural:** sobe para baixo do último fundo mais alto (numa venda, desce para cima do último topo mais baixo).
 - **Deixar correr:** num rompimento forte, ao chegar ao alvo não vende tudo; retira o alvo e usa um trailing apertado.
 - **Stop por tempo:** fecha trades parados ao fim de 24 velas sem progresso.
 - **Risco dinâmico:**
@@ -160,8 +176,14 @@ bot/brain.py       prompt e decisão da IA
 bot/news.py        pesquisa de notícias
 bot/risk.py        regras de risco, stops e trailing
 bot/trader.py      posições e contabilidade
-bot/broker.py      execução (simulada ou Binance) e verificação de chaves
-bot/market.py      dados de mercado
+bot/broker.py      execução simulada (cripto/ações e CFDs) e Binance, verificação de chaves
+bot/t212.py        corretora Trading 212 (ações e ETFs)
+bot/ctrader.py     corretora cTrader (CFDs): ligação WebSocket/JSON, OAuth, ordens com stop na corretora
+bot/market.py      dados de cripto (Binance)
+bot/stockdata.py   dados de ações (Yahoo Finance), horários das bolsas, câmbio
+bot/cfddata.py     dados de CFDs (Yahoo no Modo Teste, cTrader no Modo Real)
+bot/catalog.py     catálogos de ações, cripto e CFDs
+bot/assets.py      pesquisa e validação dos ativos que adicionas
 bot/analysis.py    indicadores e contexto para a IA
 bot/backtest.py    backtest
 ```

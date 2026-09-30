@@ -159,6 +159,20 @@ SETUP_LABELS = {
     "pullback_limit": "Compra no recuo (pendente)",
     "breakout_stop": "Compra no rompimento (pendente)",
 }
+# vendas a descoberto (CFDs): os mesmos setups detetados no gráfico "espelhado" (subidas viram descidas)
+SHORT_SETUPS = {
+    "trend_pullback": ("rally_short", "Venda no repique (tendência de baixa)"),
+    "breakout": ("breakdown_short", "Quebra de suporte com volume"),
+    "momentum": ("momentum_short", "Momentum de queda"),
+    "oversold_bounce": ("overbought_fade", "Venda de sobrecompra"),
+    "squeeze_breakout": ("squeeze_breakdown", "Quebra de compressão para baixo"),
+    "pullback_limit": ("rally_limit_short", "Venda no repique (pendente)"),
+    "breakout_stop": ("breakdown_stop_short", "Venda na quebra (pendente)"),
+}
+SHORT_ORDER = {"BUY": "SHORT", "BUY_LIMIT": "SHORT_LIMIT", "BUY_STOP": "SHORT_STOP"}
+SHORT_NOTES = {"comprar se recuar até à EMA20": "vender se repicar até à EMA20",
+               "comprar se romper a resistência": "vender se quebrar o suporte"}
+SETUP_LABELS.update({name: label for name, label in SHORT_SETUPS.values()})
 
 
 def _bounded_stop(price: float, stop: float, atr: float) -> float:
@@ -179,7 +193,35 @@ def _plan(name, score, entry, stop, target, atr, order="BUY", notes=""):
     }
 
 
-def detect_setups(df: pd.DataFrame, higher: pd.DataFrame | None = None) -> dict:
+def _mirror(df: pd.DataFrame) -> tuple[pd.DataFrame, float]:
+    """Gráfico espelhado (preço' = K - preço): uma descida passa a ser uma subida com os mesmos ATR/volume."""
+    k = 2 * float(df["high"].max())
+    m = df.copy()
+    m["open"], m["close"] = k - df["open"], k - df["close"]
+    m["high"], m["low"] = k - df["low"], k - df["high"]
+    return m, k
+
+
+def detect_setups(df: pd.DataFrame, higher: pd.DataFrame | None = None, allow_short: bool = False) -> dict:
+    """Setups de compra (e, com allow_short, de venda a descoberto) com planos entrada/stop/alvo e pontuação 0-100."""
+    res = _long_setups(df, higher)
+    if not allow_short or len(df) < 60:
+        return res
+    mdf, k = _mirror(df)
+    mh = _mirror(higher)[0] if higher is not None and len(higher) > 60 else None
+    mres = _long_setups(mdf, mh)
+    shorts = []
+    for st in mres["setups"]:
+        name, label = SHORT_SETUPS[st["setup"]]
+        shorts.append({**st, "setup": name, "label": label, "order": SHORT_ORDER[st["order"]],
+                       "entry": price_fmt(k - st["entry"]), "stop": price_fmt(k - st["stop"]),
+                       "target": price_fmt(k - st["target"]), "notes": SHORT_NOTES.get(st["notes"], st["notes"])})
+    both = sorted(res["setups"] + shorts, key=lambda x: -x["score"])[:3]
+    return {**res, "score": max(res["score"], mres["score"]), "setups": both,
+            "short_score": mres["score"], "long_score": res["score"]}
+
+
+def _long_setups(df: pd.DataFrame, higher: pd.DataFrame | None = None) -> dict:
     """Procura setups de compra conhecidos e devolve planos (entrada/stop/alvo) e uma pontuação 0-100."""
     c, o = df["close"], df["open"]
     price = float(c.iloc[-1])
@@ -290,9 +332,10 @@ def btc_context(frames: dict) -> dict:
 
 
 def rules_context(price: float, atr: float) -> dict:
-    return {
-        "long_only_spot": True,
-        "quote_currency": config.QUOTE,
+    cfd = config.MARKET == "cfd"
+    out = {
+        "long_only_spot": not cfd,
+        "quote_currency": config.account_currency(),
         "trading_profile": config.PROFILE,
         "pending_order_validity_candles": config.PENDING_ORDER_CANDLES,
         "min_confidence_to_buy": config.MIN_CONFIDENCE,
@@ -304,6 +347,13 @@ def rules_context(price: float, atr: float) -> dict:
         ],
         "round_trip_cost_pct": round(2 * (config.FEE_PCT + config.SLIPPAGE_PCT), 3),
     }
+    if cfd:
+        out["short_selling_allowed"] = bool(config.CFD_ALLOW_SHORT)
+        if config.CFD_ALLOW_SHORT:
+            out["valid_stop_loss_price_range_short"] = [price_fmt(price + config.STOP_MIN_ATR * atr),
+                                                        price_fmt(price + config.STOP_MAX_ATR * atr)]
+        out["positions_closed_before_weekend"] = bool(config.CFD_CLOSE_BEFORE_WEEKEND)
+    return out
 
 
 def build_context(
@@ -329,9 +379,9 @@ def build_context(
     order = [config.PRIMARY_TIMEFRAME] + [tf for tf in config.CONTEXT_TIMEFRAMES if tf in frames]
     higher = frames.get(config.CONTEXT_TIMEFRAMES[1]) if len(config.CONTEXT_TIMEFRAMES) > 1 else None
     if setups is None:
-        setups = detect_setups(primary, higher)
+        setups = detect_setups(primary, higher, allow_short=config.MARKET == "cfd" and config.CFD_ALLOW_SHORT)
     rel = None
-    if btc_frame is not None and len(btc_frame) > 21 and not symbol.startswith("BTC/"):
+    if btc_frame is not None and len(btc_frame) > 21 and symbol != config.benchmark():
         mine = pct(price, primary["close"].iloc[-21])
         theirs = pct(btc_frame["close"].iloc[-1], btc_frame["close"].iloc[-21])
         if mine is not None and theirs is not None:

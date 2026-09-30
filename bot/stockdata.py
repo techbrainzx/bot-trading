@@ -31,9 +31,24 @@ SESSIONS = {  # bolsa -> (fuso, abertura, fecho)
     "AS": ("Europe/Amsterdam", dtime(9, 0), dtime(17, 30)),
     "PA": ("Europe/Paris", dtime(9, 0), dtime(17, 30)),
     "MI": ("Europe/Rome", dtime(9, 0), dtime(17, 30)),
+    "LS": ("Europe/Lisbon", dtime(8, 0), dtime(16, 30)),
+    "MC": ("Europe/Madrid", dtime(9, 0), dtime(17, 30)),
+    "BR": ("Europe/Brussels", dtime(9, 0), dtime(17, 30)),
+    "CO": ("Europe/Copenhagen", dtime(9, 0), dtime(17, 0)),
+    "SW": ("Europe/Zurich", dtime(9, 0), dtime(17, 30)),
+    "ST": ("Europe/Stockholm", dtime(9, 0), dtime(17, 30)),
+    "HE": ("Europe/Helsinki", dtime(10, 0), dtime(18, 30)),
+    "OL": ("Europe/Oslo", dtime(9, 0), dtime(16, 20)),
+    "VI": ("Europe/Vienna", dtime(9, 0), dtime(17, 30)),
+    "TO": ("America/Toronto", dtime(9, 30), dtime(16, 0)),
 }
 EXCHANGE_NAMES = {"US": "Bolsa de Nova Iorque/Nasdaq", "DE": "Xetra (Frankfurt)", "L": "Londres", "AS": "Amesterdão",
-                  "PA": "Paris", "MI": "Milão"}
+                  "PA": "Paris", "MI": "Milão", "LS": "Euronext Lisboa", "MC": "Madrid", "BR": "Bruxelas",
+                  "CO": "Copenhaga", "SW": "Zurique", "ST": "Estocolmo", "HE": "Helsínquia", "OL": "Oslo",
+                  "VI": "Viena", "TO": "Toronto"}
+EXCHANGE_SHORT = {"US": "Nova Iorque", "DE": "Xetra", "L": "Londres", "AS": "Amesterdão", "PA": "Paris", "MI": "Milão",
+                  "LS": "Lisboa", "MC": "Madrid", "BR": "Bruxelas", "CO": "Copenhaga", "SW": "Zurique",
+                  "ST": "Estocolmo", "HE": "Helsínquia", "OL": "Oslo", "VI": "Viena", "TO": "Toronto"}
 
 # nomes para procurar notícias
 STOCK_NAMES = {
@@ -82,8 +97,9 @@ class _FakeEx:
 
     @property
     def markets(self) -> dict:
-        return {s: {"symbol": s, "spot": True, "active": True, "quote": config.STOCK_CURRENCY, "base": s}
-                for s in config.STOCK_UNIVERSE + [config.benchmark(), config.TREND_CASH_ETF] + config.TREND_UNIVERSE}
+        syms = (config.STOCK_UNIVERSE + config.STOCK_ASSETS + [config.benchmark(), config.TREND_CASH_ETF]
+                + config.TREND_UNIVERSE + self.owner.discoveries())
+        return {s: {"symbol": s, "spot": True, "active": True, "quote": config.STOCK_CURRENCY, "base": s} for s in syms}
 
     def fetch_ticker(self, symbol):
         return self.owner.ticker(symbol)
@@ -102,6 +118,7 @@ class StockData:
         self._ccy: dict = {}
         self._fx: dict = {}
         self._vix = (0.0, None)
+        self._disc = (0.0, [])
 
     # ------------------------------------------------------------------ básicos
     @staticmethod
@@ -114,7 +131,8 @@ class StockData:
 
     @staticmethod
     def has_symbol(symbol: str) -> bool:
-        if symbol in config.STOCK_UNIVERSE or symbol in config.TREND_UNIVERSE or symbol == config.TREND_CASH_ETF:
+        if (symbol in config.STOCK_UNIVERSE or symbol in config.STOCK_ASSETS or symbol in config.TREND_UNIVERSE
+                or symbol == config.TREND_CASH_ETF):
             return True
         try:
             return float(yf.Ticker(symbol).fast_info["lastPrice"] or 0) > 0
@@ -222,7 +240,7 @@ class StockData:
         ts, data = self._daily
         if data and time.time() - ts < 600:
             return data
-        syms = list(dict.fromkeys(config.STOCK_UNIVERSE + [config.benchmark()]))
+        syms = list(dict.fromkeys(config.STOCK_UNIVERSE + config.STOCK_ASSETS + self.discoveries() + [config.benchmark()]))
         frames = self._download(syms, "1d", period="1mo")
         data = {}
         for s, df in frames.items():
@@ -235,11 +253,37 @@ class StockData:
         return data
 
     def liquid_symbols(self, n: int, min_volume: float) -> list:
+        """Os mais negociados ENTRE as bolsas abertas agora (catálogo + descobertas do dia)."""
         tick = self.all_tickers()
-        rows = [(s, tick.get(s, {}).get("quoteVolume") or 0) for s in config.STOCK_UNIVERSE]
+        pool = list(dict.fromkeys(config.STOCK_UNIVERSE + self.discoveries()))
+        open_pool = [s for s in pool if self.session_open(s)] or pool
+        rows = [(s, tick.get(s, {}).get("quoteVolume") or 0) for s in open_pool]
         rows = [r for r in rows if r[1] >= min_volume * 0.1]
         rows.sort(key=lambda x: -x[1])
         return [s for s, _ in rows[:n]]
+
+    def discoveries(self) -> list:
+        """Ações americanas grandes (>5 mil M$, >5$) mais ativas e a subir hoje (cache de 30 min)."""
+        if not config.STOCK_DISCOVERY:
+            return []
+        ts, data = self._disc
+        if time.time() - ts < 1800:
+            return data
+        from .assets import US_EXCHANGES
+        found = []
+        for screen in ("most_actives", "day_gainers"):
+            try:
+                for q in yf.screen(screen, count=25).get("quotes", []):
+                    if (q.get("quoteType") == "EQUITY" and (q.get("marketCap") or 0) >= 5e9
+                            and (q.get("regularMarketPrice") or 0) >= 5 and q.get("exchange") in US_EXCHANGES):
+                        found.append(q["symbol"])
+            except Exception as e:
+                log.debug("Descobertas do Yahoo falharam (%s): %s", screen, e)
+        data = list(dict.fromkeys(found))[:15]
+        self._disc = (time.time(), data)
+        if data:
+            log.info("Descobertas do dia: %s", ", ".join(data))
+        return data
 
     # ------------------------------------------------------------------ bolsa aberta?
     def session_open(self, symbol: str, now: datetime | None = None) -> bool:
@@ -265,10 +309,11 @@ class StockData:
 
     def market_status(self) -> list:
         out = []
-        for ex in sorted({exchange_of(s) for s in config.STOCK_UNIVERSE}):
+        syms = list(dict.fromkeys([*config.STOCK_UNIVERSE, *config.STOCK_ASSETS]))
+        for ex in sorted({exchange_of(s) for s in syms} & SESSIONS.keys()):
             tzname, start, end = SESSIONS[ex]
-            sample = next(s for s in config.STOCK_UNIVERSE if exchange_of(s) == ex)
-            short = {"US": "Nova Iorque", "DE": "Xetra", "L": "Londres", "AS": "Amesterdão", "PA": "Paris", "MI": "Milão"}[ex]
+            sample = next(s for s in syms if exchange_of(s) == ex)
+            short = EXCHANGE_SHORT.get(ex, ex)
             out.append({"exchange": ex, "name": EXCHANGE_NAMES[ex], "short": short, "open": self.market_open(sample),
                         "hours": f"{start:%H:%M}-{end:%H:%M} ({tzname.split('/')[-1].replace('_', ' ')})"})
         return out

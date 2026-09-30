@@ -38,11 +38,16 @@ T212_API_KEY = os.getenv("T212_API_KEY", "").strip()            # Trading 212 (c
 T212_API_SECRET = os.getenv("T212_API_SECRET", "").strip()
 T212_DEMO_API_KEY = os.getenv("T212_DEMO_API_KEY", "").strip()  # Trading 212 (conta demo)
 T212_DEMO_API_SECRET = os.getenv("T212_DEMO_API_SECRET", "").strip()
+CTRADER_CLIENT_ID = os.getenv("CTRADER_CLIENT_ID", "").strip()          # aplicação criada em openapi.ctrader.com
+CTRADER_CLIENT_SECRET = os.getenv("CTRADER_CLIENT_SECRET", "").strip()
+CTRADER_ACCESS_TOKEN = os.getenv("CTRADER_ACCESS_TOKEN", "").strip()    # autorização da tua conta cTrader ID
+CTRADER_REFRESH_TOKEN = os.getenv("CTRADER_REFRESH_TOKEN", "").strip()
+CTRADER_TOKEN_EXPIRES = os.getenv("CTRADER_TOKEN_EXPIRES", "").strip()  # data (epoch) em que o token expira
 
 # ============================================================
 #  MERCADO
 # ============================================================
-MARKET = "crypto"                          # crypto (Binance) | stocks (ações e ETFs, Trading 212)
+MARKET = "crypto"                          # crypto (Binance) | stocks (ações e ETFs, Trading 212) | cfd (cTrader)
 EXCHANGE = "binance"
 # Na UE (MiCA) a Binance não permite pares com USDT: usa USDC (≈ 1 dólar) ou EUR.
 QUOTE = "USDC"
@@ -150,7 +155,10 @@ STOCK_CURRENCY = "EUR"          # moeda da conta (Trading 212)
 STOCK_STRATEGY = "ativo"        # ativo = IA como em cripto | tendencia = rotação de ETFs por momentum (longo prazo)
 STOCK_FEE_PCT = 0.15            # Trading 212: sem comissão, mas 0,15% de câmbio em ações em dólares
 STOCK_MIN_ORDER = 2.0
-STOCK_ASSETS = ["AAPL", "MSFT", "NVDA", "SXR8.DE"]  # ativos fixos em ações (só com a escolha automática desligada)
+STOCK_ASSETS = ["AAPL", "MSFT", "NVDA", "SXR8.DE", "4GLD.DE"]  # os teus ativos (sempre analisados pelo radar)
+STOCK_CATEGORIES = ["big_tech", "semis", "software", "fintech", "finance", "health", "consumer", "industry",
+                    "portugal", "etf_index", "etf_sector", "metals"]  # categorias do catálogo que o radar vê
+STOCK_DISCOVERY = True          # junta as ações americanas grandes mais ativas / a subir no dia (Yahoo)
 EARNINGS_BLACKOUT_DAYS = 2      # sem novas entradas nos N dias antes dos resultados trimestrais
 EXIT_BEFORE_EARNINGS = True     # fecha posições na véspera dos resultados (evita saltos de preço)
 STOCK_UNIVERSE = [
@@ -171,6 +179,21 @@ TREND_SMA_DAYS = 200            # filtro de tendência (Faber, 2007)
 TREND_REBALANCE = "monthly"     # monthly | weekly
 
 # ============================================================
+#  CFDs (cTrader): ouro, prata, forex, índices e petróleo, com compra E venda a descoberto
+# ============================================================
+CFD_CURRENCY = "EUR"            # moeda da conta (no Modo Real passa a ser a da conta cTrader)
+CFD_ASSETS = ["XAUUSD", "EURUSD", "US500"]  # os teus instrumentos (sempre analisados)
+CFD_CATEGORIES = ["metals", "fx_major", "indices", "energy"]  # categorias do catálogo que o radar vê
+CFD_ALLOW_SHORT = True          # permite apostar na descida (vender a descoberto)
+CFD_CLOSE_BEFORE_WEEKEND = True  # fecha tudo na sexta antes do fecho (evita os saltos de preço do fim de semana)
+CFD_FEE_PCT = 0.01              # custo por operação além do spread (comissão típica cTrader "raw")
+CFD_SLIPPAGE_PCT = 0.01         # metade do spread típico
+CFD_SWAP_PCT_YEAR = 6.0         # custo de financiamento por noite (Modo Teste), em % ao ano do valor exposto
+CTRADER_DEMO_ACCOUNT = 0        # conta cTrader (ctidTraderAccountId) usada no Modo Real demo
+CTRADER_LIVE_ACCOUNT = 0        # conta cTrader usada no Modo Real
+BASE_SLIPPAGE_PCT = 0.05        # cripto e ações
+
+# ============================================================
 #  CICLO
 # ============================================================
 CHECK_INTERVAL_SECONDS = 20     # frequência de verificação de stops, alvos e ordens pendentes
@@ -182,7 +205,10 @@ EQUITY_POINT_SECONDS = 300      # frequência dos pontos da curva de capital
 # ============================================================
 EDITABLE = {
     "MODE": str, "USE_TESTNET": bool, "LIVE_CONFIRMED": bool, "MARKET": str,
-    "STOCK_CURRENCY": str, "STOCK_STRATEGY": str, "STOCK_UNIVERSE": list, "STOCK_ASSETS": list,
+    "STOCK_CURRENCY": str, "STOCK_STRATEGY": str, "STOCK_ASSETS": list, "STOCK_CATEGORIES": list,
+    "STOCK_DISCOVERY": bool,
+    "CFD_CURRENCY": str, "CFD_ASSETS": list, "CFD_CATEGORIES": list, "CFD_ALLOW_SHORT": bool,
+    "CFD_CLOSE_BEFORE_WEEKEND": bool, "CTRADER_DEMO_ACCOUNT": int, "CTRADER_LIVE_ACCOUNT": int,
     "EARNINGS_BLACKOUT_DAYS": int,
     "EXIT_BEFORE_EARNINGS": bool, "TREND_TOP_N": int, "TREND_REBALANCE": str,
     "QUOTE": str, "ASSETS": list, "PRIMARY_TIMEFRAME": str, "PROFILE": str,
@@ -209,6 +235,7 @@ def current() -> dict:
 def _migrate(values: dict) -> dict:
     """Converte definições antigas (SYMBOLS com USDT) para ASSETS + QUOTE."""
     values = dict(values)
+    values.pop("STOCK_UNIVERSE", None)  # passou a vir das categorias do catálogo
     if "SYMBOLS" in values and "ASSETS" not in values:
         values["ASSETS"] = [s.split("/")[0] for s in values["SYMBOLS"]]
     values.pop("SYMBOLS", None)
@@ -220,7 +247,15 @@ def apply(values: dict):
     for k, v in _migrate(values).items():
         if k in EDITABLE:
             g[k] = list(v) if EDITABLE[k] is list else EDITABLE[k](v)
-    if g["MARKET"] == "stocks":
+    from bot.catalog import CFD_CATALOG, categories_universe
+    g["STOCK_UNIVERSE"] = categories_universe(g["STOCK_CATEGORIES"]) or categories_universe(["big_tech", "etf_index"])
+    g["CFD_UNIVERSE"] = categories_universe(g["CFD_CATEGORIES"], CFD_CATALOG) or categories_universe(["metals"], CFD_CATALOG)
+    g["SLIPPAGE_PCT"] = g["BASE_SLIPPAGE_PCT"]
+    if g["MARKET"] == "cfd":
+        g["SYMBOLS"] = list(g["CFD_ASSETS"])
+        g["CONTEXT_TIMEFRAMES"] = CONTEXT_TIMEFRAMES_BY_PRIMARY.get(g["PRIMARY_TIMEFRAME"], ["15m", "4h", "1d"])
+        g["FEE_PCT"], g["SLIPPAGE_PCT"], g["MIN_ORDER_VALUE"] = g["CFD_FEE_PCT"], g["CFD_SLIPPAGE_PCT"], 0.0
+    elif g["MARKET"] == "stocks":
         if g["PRIMARY_TIMEFRAME"] not in ("15m", "1h"):
             g["PRIMARY_TIMEFRAME"] = "1h"
         g["SYMBOLS"] = list(g["STOCK_ASSETS"])
@@ -254,30 +289,40 @@ STOCK_CONTEXT_TIMEFRAMES = {"15m": ["5m", "1h", "1d"], "1h": ["15m", "1d", "1wk"
 
 def mode_key(mode: str | None = None, testnet: bool | None = None, market: str | None = None) -> str:
     """Cripto: paper | testnet | live. Ações: stocks_paper | stocks_demo | stocks_live.
-    Cada um tem a sua carteira e histórico."""
+    CFDs: cfd_paper | cfd_demo | cfd_live. Cada um tem a sua carteira e histórico."""
     mode = MODE if mode is None else mode
     testnet = USE_TESTNET if testnet is None else testnet
     market = MARKET if market is None else market
     base = "paper" if mode == "paper" else ("testnet" if testnet else "live")
-    if market == "stocks":
-        return {"paper": "stocks_paper", "testnet": "stocks_demo", "live": "stocks_live"}[base]
+    if market in ("stocks", "cfd"):
+        return {"paper": f"{market}_paper", "testnet": f"{market}_demo", "live": f"{market}_live"}[base]
     return base
 
 
+def is_paper(key: str) -> bool:
+    return key in ("paper", "stocks_paper", "cfd_paper")
+
+
 def account_currency() -> str:
-    return STOCK_CURRENCY if MARKET == "stocks" else QUOTE
+    return {"stocks": STOCK_CURRENCY, "cfd": CFD_CURRENCY}.get(MARKET, QUOTE)
 
 
 def benchmark() -> str:
-    """Referência do mercado para força relativa e clima: BTC em cripto, S&P 500 (SPY, só para análise) em ações."""
-    return "SPY" if MARKET == "stocks" else f"BTC/{QUOTE}"
+    """Referência do mercado para força relativa e clima: BTC em cripto, S&P 500 em ações (SPY) e CFDs (US500)."""
+    return {"stocks": "SPY", "cfd": "US500"}.get(MARKET, f"BTC/{QUOTE}")
 
 
 def benchmark_label() -> str:
-    return "S&P 500" if MARKET == "stocks" else "BTC"
+    return "BTC" if MARKET == "crypto" else "S&P 500"
+
+
+def ctrader_account(key: str) -> int:
+    return int(CTRADER_DEMO_ACCOUNT if key == "cfd_demo" else CTRADER_LIVE_ACCOUNT if key == "cfd_live" else 0)
 
 
 def exchange_keys(key: str) -> tuple[str, str]:
+    if key in ("cfd_demo", "cfd_live"):  # cTrader: autorização por token (a conta escolhe-se na interface)
+        return CTRADER_ACCESS_TOKEN, str(ctrader_account(key) or "")
     if key == "stocks_demo":
         return T212_DEMO_API_KEY, T212_DEMO_API_SECRET
     if key == "stocks_live":

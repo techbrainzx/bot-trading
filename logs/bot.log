@@ -451,3 +451,45 @@ ConnectionResetError: [WinError 10054] An existing connection was forcibly close
 2026-09-30 00:14:15 INFO    VENDA NEAR/USDC (manual): @ 4.9995 | PnL +12.98 USDC (+1.18%, +0.27R)
 2026-09-30 00:14:15 INFO    VENDA LINK/USDC (manual): @ 14.7526 | PnL +11.80 USDC (+0.57%, +0.25R)
 2026-09-30 00:14:20 INFO    Bot parado. As posições abertas mantêm-se, mas só são vigiadas com o bot a correr.
+2026-09-30 19:02:36 INFO    Aplicação iniciada em http://127.0.0.1:8765/
+2026-09-30 19:02:38 INFO    Notícias: 283 manchetes de 13/13 sites
+2026-09-30 19:04:56 INFO    Aplicação iniciada em http://127.0.0.1:8765/
+2026-09-30 19:04:58 INFO    Notícias: 282 manchetes de 13/13 sites
+2026-09-30 19:04:58 WARNING Calendário económico indisponível: Expecting value: line 1 column 1 (char 0)
+2026-09-30 19:07:22 INFO    Aplicação iniciada em http://127.0.0.1:8765/
+2026-09-30 19:07:24 INFO    Notícias: 282 manchetes de 13/13 sites
+2026-09-30 19:07:24 WARNING Calendário económico indisponível: Expecting value: line 1 column 1 (char 0)
+2026-09-30 19:08:34 INFO    Aplicação iniciada em http://127.0.0.1:8765/
+2026-09-30 19:08:36 INFO    Notícias: 282 manchetes de 13/13 sites
+2026-09-30 19:08:36 WARNING Calendário económico indisponível: Expecting value: line 1 column 1 (char 0)
+2026-09-30 19:11:24 INFO    Aplicação iniciada em http://127.0.0.1:8765/
+2026-09-30 19:11:25 INFO    Notícias: 282 manchetes de 13/13 sites
+2026-09-30 19:12:44 INFO    Aplicação iniciada em http://127.0.0.1:8765/
+2026-09-30 19:12:45 INFO    Notícias: 282 manchetes de 13/13 sites
+2026-09-30 19:12:50 INFO    Mercado mudado para Ações e ETFs (Modo Teste).
+2026-09-30 19:24:25 INFO    Aplicação iniciada em http://127.0.0.1:8765/
+2026-09-30 19:24:28 INFO    Descobertas do dia: NU, INTC, NVDA, SPCX, NOK, AAL, ITUB, AGNC, SOFI, PATH, F, TSLA, WBD, HOOD, CDE
+2026-09-30 19:24:38 INFO    Notícias: 146 manchetes de 10/11 sites
+2026-09-30 19:25:08 INFO    Ativo adicionado à tua lista: PPFB.DE (iShares Physical Metals PLC   O)
+2026-09-30 19:27:18 INFO    Ativo removido da tua lista: PPFB.DE (posições abertas não são afetadas)
+2026-09-30 19:28:07 INFO    Aplicação iniciada em http://127.0.0.1:8765/
+2026-09-30 19:28:20 INFO    Notícias: 146 manchetes de 10/11 sites
+2026-09-30 19:28:52 INFO    Descobertas do dia: NU, INTC, NVDA, SPCX, NOK, AAL, ITUB, AGNC, SOFI, PATH, F, TSLA, WBD, HOOD, CDE
+2026-09-30 19:29:33 INFO    Ativo adicionado à tua lista: PPFB.DE (iShares Physical Metals PLC   O)
+2026-09-30 19:29:40 INFO    Ativo removido da tua lista: PPFB.DE (posições abertas não são afetadas)
+2026-09-30 19:29:56 INFO    Mercado mudado para Cripto (Modo Teste).
+2026-09-30 19:30:50 INFO    Aplicação iniciada em http://127.0.0.1:8765/
+2026-09-30 19:30:53 INFO    Notícias: 283 manchetes de 13/13 sites
+2026-09-30 19:31:22 INFO    Mercado mudado para Ações e ETFs (Modo Teste).
+2026-09-30 19:31:24 INFO    Descobertas do dia: NU, INTC, NVDA, SPCX, NOK, AAL, ITUB, AGNC, SOFI, PATH, F, WBD, TSLA, HOOD, CDE
+2026-09-30 19:32:29 INFO    Aplicação iniciada em http://127.0.0.1:8765/
+2026-09-30 19:32:33 INFO    Descobertas do dia: NU, INTC, NVDA, SPCX, NOK, AAL, ITUB, AGNC, SOFI, PATH, F, WBD, TSLA, HOOD, CDE
+2026-09-30 19:32:42 INFO    Notícias: 146 manchetes de 10/11 sites
+2026-09-30 19:39:41 INFO    Aplicação iniciada em http://127.0.0.1:8765/
+2026-09-30 19:39:44 INFO    Descobertas do dia: NU, INTC, NVDA, SPCX, NOK, AAL, ITUB, AGNC, SOFI, PATH, F, TSLA, WBD, HOOD, CDE
+2026-09-30 19:39:54 INFO    Notícias: 146 manchetes de 10/11 sites
+2026-09-30 20:39:25 INFO    Aplicação iniciada em http://127.0.0.1:8765/
+2026-09-30 20:39:28 INFO    Descobertas do dia: NU, INTC, NVDA, SPCX, NOK, ITUB, WBD, AAL, AGNC, F, PATH, SOFI, CDE, HL, TSLA
+2026-09-30 20:39:36 INFO    Mercado mudado para CFDs (ouro, forex, índices) (Modo Teste).
+2026-09-30 20:39:38 INFO    Notícias: 148 manchetes de 10/11 sites
+2026-09-30 20:40:02 INFO    Mercado mudado para Cripto (Modo Teste).

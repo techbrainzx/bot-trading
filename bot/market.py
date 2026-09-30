@@ -33,7 +33,7 @@ def to_df(rows) -> pd.DataFrame:
 
 EXCLUDED_BASES = {
     "USDT", "USDC", "FDUSD", "TUSD", "DAI", "USDP", "USD1", "USDE", "USDS", "RLUSD", "BFUSD", "XUSD", "EURI",
-    "EUR", "GBP", "TRY", "BRL", "U", "PAXG", "XAUT", "WBTC", "WBETH", "BNSOL", "BETH", "USTC", "AEUR",
+    "EUR", "GBP", "TRY", "BRL", "U", "WBTC", "WBETH", "BNSOL", "BETH", "USTC", "AEUR",
 }
 
 

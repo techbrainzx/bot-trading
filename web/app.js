@@ -51,9 +51,18 @@ function fmtDuration(h) {
   if (h < 48) return `${nf(1).format(h)} h`;
   return `${nf(1).format(h / 24)} d`;
 }
-const REASONS = { stop_loss: "Stop-loss", trailing_stop: "Trailing stop", take_profit: "Take-profit", sinal_ia: "Sinal da IA", manual: "Manual" };
-const ACTION_PT = { BUY: "COMPRAR", SELL: "VENDER", HOLD: "ESPERAR", BUY_LIMIT: "COMPRA NO RECUO", BUY_STOP: "COMPRA NO ROMPIMENTO", SKIP: "SEM SETUP" };
-const PENDING_PT = { BUY_LIMIT: "Comprar no recuo", BUY_STOP: "Comprar no rompimento" };
+const REASONS = { stop_loss: "Stop-loss", trailing_stop: "Trailing stop", take_profit: "Take-profit", sinal_ia: "Sinal da IA", manual: "Manual",
+  fim_de_semana: "Fecho de sexta", corretora: "Na corretora", antes_resultados: "Antes dos resultados", sem_progresso: "Sem progresso",
+  parcial: "Parcial (1R)", alvo_parcial: "Alvo (parcial)", reequilibrio: "Reequilíbrio", abaixo_media_200: "Abaixo da MM200" };
+const ACTION_PT = { BUY: "COMPRAR", SELL: "VENDER", HOLD: "ESPERAR", BUY_LIMIT: "COMPRA NO RECUO", BUY_STOP: "COMPRA NO ROMPIMENTO", SKIP: "SEM SETUP",
+  SHORT: "VENDA SHORT", SHORT_LIMIT: "SHORT NO REPIQUE", SHORT_STOP: "SHORT NA QUEBRA", CLOSE: "FECHAR" };
+const PENDING_PT = { BUY_LIMIT: "Comprar no recuo", BUY_STOP: "Comprar no rompimento", SHORT_LIMIT: "Vender no repique", SHORT_STOP: "Vender na quebra" };
+const ENTRY_ACTIONS = ["BUY", "BUY_LIMIT", "BUY_STOP", "SHORT", "SHORT_LIMIT", "SHORT_STOP"];
+const MARKET_PT = { crypto: "Cripto", stocks: "Ações & ETFs", cfd: "CFDs (ouro, forex, índices)" };
+const BROKER_PT = { crypto: "Binance", stocks: "Trading 212", cfd: "cTrader" };
+const broker = () => BROKER_PT[S.status?.market] || "Binance";
+const sideBadge = (side) => (side === "short" ? '<span class="side-badge short" title="Venda a descoberto: ganha se o preço descer">VENDA</span>'
+  : '<span class="side-badge long" title="Compra: ganha se o preço subir">COMPRA</span>');
 const PROFILE_PT = { conservador: "Conservador", equilibrado: "Equilibrado", agressivo: "Agressivo", personalizado: "Personalizado" };
 const TREND_PT = { strong_up: "alta forte", up: "alta", sideways: "lateral", down: "baixa", strong_down: "baixa forte" };
 const Q = () => S.status?.quote || "USDC";
@@ -186,19 +195,23 @@ async function refreshCandles(reset = false) {
     candleSeries.setData(d.candles.map((c) => ({ time: c.time + TZ, open: c.open, high: c.high, low: c.low, close: c.close })));
     setVolume(d.candles);
     const up = cssVar("--up"), down = cssVar("--down");
-    candleSeries.setMarkers(d.markers.map((m) => ({
-      time: m.time + TZ,
-      position: m.kind === "buy" ? "belowBar" : "aboveBar",
-      shape: m.kind === "buy" ? "arrowUp" : "arrowDown",
-      color: m.kind === "buy" ? cssVar("--accent") : (m.pnl >= 0 ? up : down),
-      text: m.kind === "buy" ? "Compra" : `Venda ${fmtSigned(m.pnl)}`,
-    })));
+    const MK = {  // compra/venda normais + venda a descoberto (short) e recompra (cover)
+      buy: ["belowBar", "arrowUp", () => cssVar("--accent"), () => "Compra"],
+      sell: ["aboveBar", "arrowDown", (m) => (m.pnl >= 0 ? up : down), (m) => `Venda ${fmtSigned(m.pnl)}`],
+      short: ["aboveBar", "arrowDown", () => cssVar("--accent"), () => "Venda (short)"],
+      cover: ["belowBar", "arrowUp", (m) => (m.pnl >= 0 ? up : down), (m) => `Fecho ${fmtSigned(m.pnl)}`],
+    };
+    candleSeries.setMarkers(d.markers.map((m) => {
+      const [position, shape, color, text] = MK[m.kind] || MK.buy;
+      return { time: m.time + TZ, position, shape, color: color(m), text: text(m) };
+    }));
     priceLines.forEach((l) => candleSeries.removePriceLine(l));
     priceLines = [];
     if (d.lines) {
       const L = LightweightCharts.LineStyle;
-      if (d.lines.entry) priceLines.push(candleSeries.createPriceLine({ price: d.lines.entry, color: cssVar("--accent"), lineWidth: 1, lineStyle: L.Solid, title: "Entrada" }));
-      if (d.lines.pending) priceLines.push(candleSeries.createPriceLine({ price: d.lines.pending, color: cssVar("--accent"), lineWidth: 2, lineStyle: L.Dotted, title: d.lines.pending_type === "BUY_LIMIT" ? "Compra (recuo)" : "Compra (rompimento)" }));
+      if (d.lines.entry) priceLines.push(candleSeries.createPriceLine({ price: d.lines.entry, color: cssVar("--accent"), lineWidth: 1, lineStyle: L.Solid, title: d.lines.side === "short" ? "Entrada (venda)" : "Entrada" }));
+      const PEND_TITLE = { BUY_LIMIT: "Compra (recuo)", BUY_STOP: "Compra (rompimento)", SHORT_LIMIT: "Venda (repique)", SHORT_STOP: "Venda (quebra)" };
+      if (d.lines.pending) priceLines.push(candleSeries.createPriceLine({ price: d.lines.pending, color: cssVar("--accent"), lineWidth: 2, lineStyle: L.Dotted, title: PEND_TITLE[d.lines.pending_type] || "Pendente" }));
       priceLines.push(candleSeries.createPriceLine({ price: d.lines.stop, color: down, lineWidth: 1, lineStyle: L.Dashed, title: "Stop" }));
       if (d.lines.take_profit) priceLines.push(candleSeries.createPriceLine({ price: d.lines.take_profit, color: up, lineWidth: 1, lineStyle: L.Dashed, title: "Alvo" }));
     }
@@ -280,27 +293,30 @@ function renderStatus(s) {
     btn.className = s.running ? "btn btn-stop" : s.mode === "live" ? "btn btn-danger" : "btn btn-primary";
     btn.innerHTML = s.running ? `${icon("stop", "i-fill")}<span>Parar bot</span>` : `${icon("play", "i-fill")}<span>Iniciar bot</span>`;
   }
+  $("#brandSub").textContent = { stocks: "Trading 212 · Yahoo Finance · OpenAI", cfd: "cTrader · Yahoo Finance · OpenAI" }[s.market] || "Binance · OpenAI";
   const act = $("#activity");
   act.textContent = s.running ? s.activity : "Bot parado";
   act.classList.toggle("busy", s.running && isBusy(s.activity));
 
   // banner
   const risk = s.risk_mode === "fixed" ? `risco ${fmtMoney(s.risk_fixed)} ${s.quote} por trade` : `risco ${nf(2).format(s.risk_pct)}% por trade`;
-  const stocks = s.market === "stocks";
+  const stocks = s.market === "stocks", cfd = s.market === "cfd";
   const trend = stocks && s.strategy === "tendencia";
-  const radar = trend ? `tendência de ETFs (sem IA)` : s.auto_select ? `escolha automática entre ${s.scanner.universe} ${stocks ? "ativos" : "moedas"}` : "pares fixos";
-  const exch = stocks && s.exchanges.length ? ` <span class="sep">·</span> ` + s.exchanges.map((e) => `<span class="exch ${e.open ? "open" : ""}" title="${esc(e.name)} ${esc(e.hours)}">${esc(e.short || e.name)} ${e.open ? "aberta" : "fechada"}</span>`).join(" ") : "";
-  const extra = ` <span class="sep">·</span> ${trend ? "" : `perfil ${PROFILE_PT[s.profile] || s.profile} <span class="sep">·</span> `}${radar}${trend ? "" : ` <span class="sep">·</span> ${risk}`}${exch}`;
-  const mk = stocks ? "AÇÕES & ETFs · " : "CRIPTO · ";
+  const radar = trend ? `tendência de ETFs (sem IA)` : s.auto_select ? `escolha automática entre ${s.scanner.universe} ${stocks ? "ativos" : cfd ? "instrumentos" : "moedas"}` : "pares fixos";
+  const exch = s.market !== "crypto" && s.exchanges.length ? ` <span class="sep">·</span> ` + exchangesSummary(s.exchanges, cfd) : "";
+  const shortTxt = cfd ? ` <span class="sep">·</span> ${s.allow_short ? "compra e venda a descoberto" : "só compras"}` : "";
+  const extra = ` <span class="sep">·</span> ${trend ? "" : `perfil ${PROFILE_PT[s.profile] || s.profile} <span class="sep">·</span> `}${radar}${shortTxt}${trend ? "" : ` <span class="sep">·</span> ${risk}`}${exch}`;
+  const mk = stocks ? "AÇÕES & ETFs · " : cfd ? "CFDs · " : "CRIPTO · ";
+  const demoName = { stocks: "conta demo da Trading 212", cfd: "conta demo do cTrader" }[s.market] || "Binance Testnet";
   const banner = $("#modeBanner");
   let html;
   if (modeKind(s) === "paper") {
     html = `${icon("flask")}<span><b>${mk}MODO TESTE</b> <span class="sep">·</span> dinheiro fictício com preços reais${extra}</span>`;
   } else if (modeKind(s) === "testnet") {
-    html = `${icon("shield")}<span><b>${mk}MODO REAL · DEMO</b> <span class="sep">·</span> dinheiro fictício na ${stocks ? "conta demo da Trading 212" : "Binance Testnet"} <span class="sep">·</span> capital ${fmtMoney(s.capital_limit, 0)} ${s.quote}${extra}</span>`;
+    html = `${icon("shield")}<span><b>${mk}MODO REAL · DEMO</b> <span class="sep">·</span> dinheiro fictício na ${demoName} <span class="sep">·</span> capital ${fmtMoney(s.capital_limit, 0)} ${s.quote}${extra}</span>`;
   } else {
     const bal = s.exchange_usdt != null ? ` <span class="sep">·</span> saldo livre ${fmtMoney(s.exchange_usdt)} ${s.quote}` : "";
-    html = `${icon("alert")}<span><b>${mk}MODO REAL</b> <span class="sep">·</span> DINHEIRO REAL na ${stocks ? "Trading 212" : "Binance"} <span class="sep">·</span> capital máximo ${fmtMoney(s.capital_limit, 0)} ${s.quote}${bal}${extra}</span>`;
+    html = `${icon("alert")}<span><b>${mk}MODO REAL</b> <span class="sep">·</span> DINHEIRO REAL ${cfd ? "no" : "na"} ${BROKER_PT[s.market]} <span class="sep">·</span> capital máximo ${fmtMoney(s.capital_limit, 0)} ${s.quote}${bal}${extra}</span>`;
   }
   if (banner.dataset.html !== html) { banner.dataset.html = html; banner.innerHTML = html; }
 
@@ -311,7 +327,7 @@ function renderStatus(s) {
     alert.dataset.key = alertKey;
     if (s.halted) {
       alert.hidden = false;
-      alert.innerHTML = `${icon("alert")}<span><b>Novas compras bloqueadas:</b> ${esc(s.halt_reason)}.</span><button class="btn btn-sm btn-secondary" id="btnResume">Desbloquear</button>`;
+      alert.innerHTML = `${icon("alert")}<span><b>Novas entradas bloqueadas:</b> ${esc(s.halt_reason)}.</span><button class="btn btn-sm btn-secondary" id="btnResume">Desbloquear</button>`;
       $("#btnResume").onclick = resumeTrading;
     } else if (s.error) {
       alert.hidden = false;
@@ -400,13 +416,13 @@ function renderFocus(s) {
   box.dataset.key = key;
   $("#regimeBadge").innerHTML = r ? `<span class="regime ${r.state}" title="${r.breadth_above_ema50_pct}% das moedas acima da média de 50 no timeframe maior">${REGIME_PT[r.state]}</span>` : "";
   const intro = s.auto_select
-    ? `Modo automático: em cada análise o bot examina ${s.market === "stocks" ? "as ações e ETFs mais negociados com a bolsa aberta" : `as ${s.scanner.universe} moedas mais negociadas`} e escolhe sozinho os melhores ${s.scanner.top} para a IA analisar a fundo.`
+    ? `Modo automático: em cada análise o bot examina ${s.market === "stocks" ? "as ações e ETFs mais negociados com a bolsa aberta" : s.market === "cfd" ? "o ouro, a prata, o forex, os índices e o petróleo com o mercado aberto, a subir e a descer," : `as ${s.scanner.universe} moedas mais negociadas`} e escolhe sozinho os melhores ${s.scanner.top} para a IA analisar a fundo.`
     : "Modo manual: a IA analisa os teus pares fixos e as melhores do radar.";
   if (!f) {
     box.innerHTML = `<div class="focus-view">${esc(intro)}</div><div class="focus-foot">Ainda sem análise: inicia o bot ou clica em "Analisar agora".</div>`;
     return;
   }
-  const metrics = r ? `<div class="focus-metrics"><span><b>${r.breadth_up_pct}%</b> das moedas a subir</span>
+  const metrics = r ? `<div class="focus-metrics"><span><b>${r.breadth_up_pct}%</b> ${s.market === "crypto" ? "das moedas" : "dos ativos"} a subir</span>
       <span>${esc(r.benchmark || s.benchmark_label)}: <b>${TREND_PT[r.benchmark_trend || r.btc_trend] || "—"}</b></span><span>média 24h <b class="${cls(r.avg_change_24h_pct)}">${fmtPct(r.avg_change_24h_pct)}</b></span></div>` : "";
   const view = f.view ? `<div class="focus-view">${esc(f.view)}${f.stance ? ` <span class="muted">(postura ${STANCE_PT[f.stance] || f.stance})</span>` : ""}</div>` : "";
   const picks = f.picks.length
@@ -428,7 +444,7 @@ function renderCountdown() {
   const el = $("#kNext"), sub = $("#kNextSub");
   sub.textContent = s.market === "stocks" && s.strategy === "tendencia" ? "tendência de ETFs · sem IA"
     : `a cada ${s.timeframe} · ${PROFILE_PT[s.profile] || s.profile}`;
-  if (s.running && s.market === "stocks" && /Bolsas fechadas/.test(s.activity)) { el.innerHTML = `<span class="muted">bolsas fechadas</span>`; return; }
+  if (s.running && s.market !== "crypto" && /fechad/i.test(s.activity)) { el.innerHTML = `<span class="muted">${s.market === "cfd" ? "mercados fechados" : "bolsas fechadas"}</span>`; return; }
   if (!s.running) { el.innerHTML = `<span class="muted">parado</span>`; return; }
   if (isBusy(s.activity)) { el.innerHTML = `<span style="color:var(--accent)">a analisar…</span>`; return; }
   if (!s.next_decision_ms) { el.textContent = "—"; return; }
@@ -465,10 +481,10 @@ function renderSymbolTabs(s) {
   });
 }
 
-function positionRange(p) {
-  const lo = Math.min(p.stop, p.price), hi = Math.max(p.take_profit || p.price, p.price);
-  const span = hi - lo || 1;
-  const at = (v) => Math.min(100, Math.max(0, ((v - lo) / span) * 100));
+function positionRange(p) {  // 0% = stop, 100% = alvo (funciona para compras e vendas a descoberto)
+  const far = p.take_profit || (p.side === "short" ? Math.min(p.price, p.entry_price) : Math.max(p.price, p.entry_price));
+  const span = far - p.stop || 1;
+  const at = (v) => Math.min(100, Math.max(0, ((v - p.stop) / span) * 100));
   return { e: at(p.entry_price), c: at(p.price) };
 }
 
@@ -476,20 +492,20 @@ function renderPositions(s) {
   $("#posCount").textContent = `${s.positions.length}/${s.max_positions}`;
   $("#btnCloseAll").hidden = s.positions.length < 2;
   const host = $("#positions");
-  const key = s.positions.map((p) => `${p.symbol}|${p.stop}|${p.take_profit}|${p.partial_done}|${p.let_run}`).join(",") + s.quote;
+  const key = s.positions.map((p) => `${p.symbol}|${p.side}|${p.stop}|${p.take_profit}|${p.partial_done}|${p.let_run}`).join(",") + s.quote;
   if (host.dataset.key !== key) {
     host.dataset.key = key;
     if (!s.positions.length) {
-      host.innerHTML = `<div class="empty"><b>Sem posições abertas</b>O bot compra quando a IA encontra uma oportunidade que passa as regras de risco.</div>`;
+      host.innerHTML = `<div class="empty"><b>Sem posições abertas</b>O bot ${s.market === "cfd" ? "abre posições (compra ou venda)" : "compra"} quando a IA encontra uma oportunidade que passa as regras de risco.</div>`;
       return;
     }
     host.innerHTML = s.positions.map((p) => {
       const trendPos = p.setup === "tendencia" || !(p.stop > 0);
-      const badges = [p.partial_done ? '<span class="mini-badge good">metade vendida</span>' : "",
+      const badges = [p.partial_done ? `<span class="mini-badge good">metade ${s.market === "cfd" ? "fechada" : "vendida"}</span>` : "",
                       p.let_run ? '<span class="mini-badge good">a deixar correr</span>' : "",
                       p.rules_note ? `<span class="mini-badge">${esc(p.rules_note)}</span>` : ""].join("");
       return `<div class="position" data-sym="${esc(p.symbol)}">
-      <div class="position-top"><span class="position-sym">${esc(p.symbol)}</span><span class="position-pnl"></span></div>
+      <div class="position-top"><span class="position-sym">${esc(p.symbol)}${s.market === "cfd" ? sideBadge(p.side) : ""}</span><span class="position-pnl"></span></div>
       <div class="position-meta"><span class="pm-left"></span><span class="pm-r"></span></div>
       ${trendPos ? `<div class="pos-note">Estratégia de tendência: mantém enquanto estiver entre os melhores e acima da média de 200 dias. Entrada ${fmtPrice(p.entry_price)}.</div>` : `
       <div class="range" title="Posição do preço entre o stop e o alvo">
@@ -509,12 +525,14 @@ function renderPositions(s) {
     const pnl = $(".position-pnl", el);
     pnl.className = `position-pnl ${cls(p.pnl)}`;
     pnl.innerHTML = `${fmtSigned(p.pnl)} ${s.quote}<small>${fmtPct(p.pnl_pct)}</small>`;
-    $(".pm-left", el).textContent = `${fmtQty(p.qty)} ${base(p.symbol)} · ${fmtMoney(p.value)} ${s.quote}`;
+    $(".pm-left", el).textContent = p.margin != null
+      ? `${fmtQty(p.qty)} un. · exposição ${fmtMoney(p.notional, 0)} ${s.quote} · margem ${fmtMoney(p.margin)}`
+      : `${fmtQty(p.qty)} ${base(p.symbol)} · ${fmtMoney(p.value)} ${s.quote}`;
     $(".pm-r", el).textContent = p.r != null ? fmtSigned(p.r) + "R" : "";
     const fill = $(".range-fill", el);
     if (fill && p.stop > 0) {
       const { e, c } = positionRange(p);
-      fill.className = `range-fill ${p.price >= p.entry_price ? "up" : "down"}`;
+      fill.className = `range-fill ${(p.side === "short" ? p.price <= p.entry_price : p.price >= p.entry_price) ? "up" : "down"}`;
       fill.style.left = `${Math.min(e, c)}%`; fill.style.width = `${Math.abs(c - e)}%`;
       $(".range-mark", el).style.left = `${e}%`;
       $(".range-cur", el).style.left = `${c}%`;
@@ -591,17 +609,20 @@ async function refreshRadar() {
     const info = $("#radarInfo");
     if (!r.time) {
       info.textContent = "O radar corre em cada análise do bot. Clica em \"Atualizar radar\" para ver agora.";
-      $("#radarTable").innerHTML = `<div class="empty"><b>Radar ainda sem dados</b>${S.status?.market === "stocks" ? "Analisa as ações e ETFs com a bolsa aberta" : `Analisa as ${S.status?.scanner.universe || 25} moedas mais negociadas em ${Q()}`} e escolhe as melhores para a IA.</div>`;
+      const what = { stocks: "Analisa as ações e ETFs com a bolsa aberta", cfd: "Analisa o ouro, a prata, o forex, os índices e o petróleo (a subir e a descer)" }[S.status?.market]
+        || `Analisa as ${S.status?.scanner.universe || 25} moedas mais negociadas em ${Q()}`;
+      $("#radarTable").innerHTML = `<div class="empty"><b>Radar ainda sem dados</b>${what} e escolhe as melhores para a IA.</div>`;
       return;
     }
-    info.textContent = `${r.results.length} de ${r.universe} ${S.status?.market === "stocks" ? "ativos (bolsa aberta)" : "moedas"} · atualizado ${timeAgo(new Date(r.time * 1000).toISOString())} · as de pontuação mais alta vão à IA`;
-    $("#radarTable").innerHTML = `<table><thead><tr><th>#</th><th>Moeda</th><th></th><th>Pontuação</th><th>Setup detetado</th><th>Tendência maior</th>
+    info.textContent = `${r.results.length} de ${r.universe} ${{ stocks: "ativos (bolsa aberta)", cfd: "instrumentos (mercado aberto)" }[S.status?.market] || "moedas"} · atualizado ${timeAgo(new Date(r.time * 1000).toISOString())} · as de pontuação mais alta vão à IA`;
+    const ORDER_TXT = { BUY_LIMIT: "recuo", BUY_STOP: "rompimento", SHORT_LIMIT: "repique", SHORT_STOP: "quebra", SHORT: "venda" };
+    $("#radarTable").innerHTML = `<table><thead><tr><th>#</th><th>${S.status?.market === "crypto" ? "Moeda" : "Ativo"}</th><th></th><th>Pontuação</th><th>Setup detetado</th><th>Tendência maior</th>
       <th class="r">Preço</th><th class="r">24h</th><th class="r">vs ${esc(S.status?.benchmark_label || "BTC")}</th><th class="r">Volume</th></tr></thead><tbody>` +
       r.results.map((x, i) => `<tr class="clickable ${x.picked ? "picked" : ""}" data-sym="${esc(x.symbol)}" title="${esc(x.pick_reason || "")}">
-        <td class="muted">${i + 1}</td><td><b>${esc(base(x.symbol))}</b></td>
+        <td class="muted">${i + 1}</td><td><b>${esc(base(x.symbol))}</b>${x.mine ? ' <span class="star" title="Na tua lista">★</span>' : ""}</td>
         <td>${x.picked ? `<span class="pick-tag">${icon("check")}Escolhida</span>` : ""}</td>
         <td><div class="score"><div class="score-bar"><span style="width:${x.score}%"></span></div><b>${x.score}</b></div></td>
-        <td>${x.setup ? `${esc(x.setup.label)}${x.setup.order !== "BUY" ? ` <span class="muted small">(${x.setup.order === "BUY_LIMIT" ? "recuo" : "rompimento"} ${fmtPrice(x.setup.entry)})</span>` : ""}` : '<span class="muted">—</span>'}</td>
+        <td>${x.setup ? `${/^SHORT/.test(x.setup.order) ? sideBadge("short") + " " : ""}${esc(x.setup.label)}${x.setup.order !== "BUY" && x.setup.order !== "SHORT" ? ` <span class="muted small">(${ORDER_TXT[x.setup.order] || ""} ${fmtPrice(x.setup.entry)})</span>` : ""}` : '<span class="muted">—</span>'}</td>
         <td><span class="trend-tag ${/up/.test(x.higher_trend) ? "up" : /down/.test(x.higher_trend) ? "down" : ""}">${TREND_PT[x.higher_trend] || "—"}</span></td>
         <td class="r">${fmtPrice(x.price)}</td><td class="r ${cls(x.change_24h_pct)}">${fmtPct(x.change_24h_pct)}</td>
         <td class="r ${cls(x.rel_strength_vs_btc)}">${fmtPct(x.rel_strength_vs_btc)}</td>
@@ -630,6 +651,10 @@ async function refreshNews() {
         <span><div class="title">${esc(h.title)}</div><div class="src">${esc(h.source)}</div></span></a>`).join("")
       : `<div class="empty">Sem manchetes (verifica a ligação à internet).</div>`;
     const g = n.global, v = n.vix;
+    if (n.market !== "crypto") {
+      const rows = g ? Object.entries(g).filter(([k]) => !(v && k === "vix")).map(([k, x]) => `<div>${esc(x.label)}<b>${nf(k === "eurusd" ? 4 : x.last >= 100 ? 1 : 2).format(x.last)} <span class="${cls(x.change_1d_pct)}">${fmtPct(x.change_1d_pct)}</span></b></div>`).join("") : "";
+      $("#globalBox").innerHTML = (v ? `<div>VIX (medo das bolsas)<b>${nf(1).format(v.vix)} · ${esc(v.label)}</b></div>` : "") + (rows || `<div>Indisponível</div>`);
+    } else
     $("#globalBox").innerHTML = (v ? `<div>VIX (medo das bolsas)<b>${nf(1).format(v.vix)} · ${esc(v.label)}</b></div><div>VIX 5 dias<b class="${cls(-v.vix_5d_change_pct)}">${fmtPct(v.vix_5d_change_pct, 1)}</b></div>` : "") + (g ? `
       <div>Capitalização total<b>${nf(0).format(g.total_market_cap_usd_bn)} mil M$</b></div>
       <div>Variação 24h<b class="${cls(g.market_cap_change_24h_pct)}">${fmtPct(g.market_cap_change_24h_pct)}</b></div>
@@ -654,7 +679,7 @@ async function refreshDecisions() {
     const open = new Set($$(".dec.open", host).map((e) => e.dataset.key));
     host.innerHTML = decisions.map((d) => {
       const key = `${d.time}|${d.symbol}`;
-      const levels = d.action === "BUY" && d.stop_loss
+      const levels = ENTRY_ACTIONS.includes(d.action) && d.stop_loss
         ? `<span>Stop ${fmtPrice(d.stop_loss)}</span><span>Alvo ${fmtPrice(d.take_profit)}</span>` : "";
       return `<div class="dec ${open.has(key) ? "open" : ""}" data-key="${esc(key)}">
         <div class="dec-row">
@@ -693,7 +718,7 @@ async function refreshTrades() {
         <th>Fecho</th><th>Par</th><th class="r">Entrada</th><th class="r">Saída</th><th class="r">Duração</th>
         <th class="r">Resultado</th><th class="r">%</th><th class="r">R</th><th>Motivo</th></tr></thead><tbody>` +
       trades.map((t) => `<tr>
-        <td>${esc(fmtTime(t.closed_at))}</td><td><b>${esc(t.symbol)}</b></td>
+        <td>${esc(fmtTime(t.closed_at))}</td><td><b>${esc(t.symbol)}</b>${t.side === "short" ? sideBadge("short") : ""}</td>
         <td class="r">${fmtPrice(t.entry_price)}</td><td class="r">${fmtPrice(t.exit_price)}</td>
         <td class="r">${fmtDuration(t.hours)}</td>
         <td class="r ${cls(t.pnl)}">${fmtSigned(t.pnl)} ${Q()}</td><td class="r ${cls(t.pnl_pct)}">${fmtPct(t.pnl_pct)}</td>
@@ -771,8 +796,8 @@ async function startStop() {
       const ok = await confirmDialog({
         title: /testnet|demo/.test(s.mode_key) ? "Iniciar na conta demo?" : "Iniciar com dinheiro real?",
         text: /testnet|demo/.test(s.mode_key)
-          ? `O bot vai enviar ordens para a ${s.market === "stocks" ? "conta demo da Trading 212" : "Binance Testnet"} (dinheiro fictício), usando até <b>${fmtMoney(s.capital_limit, 0)} ${s.quote}</b>.`
-          : `O bot vai comprar e vender na tua conta ${s.market === "stocks" ? "Trading 212" : "Binance"} com até <b>${fmtMoney(s.capital_limit, 0)} ${s.quote}</b> de dinheiro real.`,
+          ? `O bot vai enviar ordens para a ${{ stocks: "conta demo da Trading 212", cfd: "conta demo do cTrader" }[s.market] || "Binance Testnet"} (dinheiro fictício), usando até <b>${fmtMoney(s.capital_limit, 0)} ${s.quote}</b>.`
+          : `O bot vai ${s.market === "cfd" ? "abrir e fechar CFDs (compra e venda)" : "comprar e vender"} na tua conta ${BROKER_PT[s.market]} com até <b>${fmtMoney(s.capital_limit, 0)} ${s.quote}</b> de dinheiro real.`,
         ok: "Iniciar", danger: /live/.test(s.mode_key),
       });
       if (!ok) return;
@@ -795,7 +820,7 @@ async function analyzeNow() {
 }
 
 async function closePosition(symbol, btn) {
-  const ok = await confirmDialog({ title: `Fechar ${symbol}?`, text: "A posição é vendida a preço de mercado agora.", ok: "Fechar posição", danger: true });
+  const ok = await confirmDialog({ title: `Fechar ${symbol}?`, text: "A posição é fechada a preço de mercado agora.", ok: "Fechar posição", danger: true });
   if (!ok) return;
   try {
     const r = await withBusy(btn, () => api("/api/positions/close", { method: "POST", body: { symbol } }));
@@ -816,7 +841,7 @@ async function cancelPending(symbol, btn) {
 }
 
 async function closeAll() {
-  const ok = await confirmDialog({ title: "Fechar todas as posições?", text: "Todas as posições são vendidas a preço de mercado agora.", ok: "Fechar tudo", danger: true });
+  const ok = await confirmDialog({ title: "Fechar todas as posições?", text: "Todas as posições são fechadas a preço de mercado agora.", ok: "Fechar tudo", danger: true });
   if (!ok) return;
   try {
     await withBusy($("#btnCloseAll"), () => api("/api/positions/close-all", { method: "POST" }));
@@ -826,10 +851,135 @@ async function closeAll() {
 }
 
 async function resumeTrading() {
-  const ok = await confirmDialog({ title: "Desbloquear novas compras?", text: "O limite de queda foi atingido. Confirma que queres que o bot volte a abrir posições.", ok: "Desbloquear" });
+  const ok = await confirmDialog({ title: "Desbloquear novas entradas?", text: "O limite de queda foi atingido. Confirma que queres que o bot volte a abrir posições.", ok: "Desbloquear" });
   if (!ok) return;
-  try { await api("/api/resume", { method: "POST" }); toast("Compras desbloqueadas.", "ok"); } catch (e) { toast(e.message, "err"); }
+  try { await api("/api/resume", { method: "POST" }); toast("Entradas desbloqueadas.", "ok"); } catch (e) { toast(e.message, "err"); }
   refreshStatus();
+}
+
+function exchangesSummary(list, cfd = false) {
+  const open = list.filter((e) => e.open), closed = list.filter((e) => !e.open);
+  const tip = (arr) => esc(arr.map((e) => `${e.name} ${e.hours}`).join("\n"));
+  const g = cfd ? "o" : "a";  // CFDs: "Forex aberto"; bolsas: "Xetra aberta"
+  const parts = open.map((e) => `<span class="exch open" title="${esc(e.name)} ${esc(e.hours)}">${esc(e.short || e.name)} abert${g}</span>`);
+  if (closed.length) {
+    const label = open.length ? `${closed.length} fechad${g}${closed.length > 1 ? "s" : ""}` : closed.length > 1 ? (cfd ? "mercados fechados" : `todas as ${closed.length} bolsas fechadas`) : `${esc(closed[0].short || closed[0].name)} fechad${g}`;
+    parts.push(`<span class="exch" title="${tip(closed)}">${label}</span>`);
+  }
+  return parts.join(" ");
+}
+
+/* ============================================================ gerir ativos */
+const TYPE_PT = { EQUITY: "Ação", ETF: "ETF/ETC", CRYPTO: "Cripto", CFD: "CFD" };
+
+async function openAssets() {
+  $("#assetsModal").hidden = false;
+  $("#assetQuery").value = "";
+  $("#assetResults").innerHTML = "";
+  const market = S.status?.market;
+  $("#assetsSubtitle").textContent = {
+    stocks: "Ações e ETFs que o bot analisa. Qualquer ativo passa pelas mesmas verificações antes de entrar.",
+    cfd: "Ouro, prata, forex, índices e petróleo (CFDs na cTrader). Cada instrumento é verificado antes de entrar.",
+  }[market] || `Criptomoedas que o bot analisa (pares em ${Q()} na Binance).`;
+  $("#assetQuery").placeholder = { stocks: "Nome ou ticker: Rheinmetall, ASML, ouro, EDP, NVDA...", cfd: "Ouro, XAUUSD, EURUSD, DAX, Nasdaq, petróleo..." }[market] || "Moeda: PAXG, PEPE, TAO...";
+  $("#assetQueryHelp").textContent = {
+    stocks: "Pesquisa no Yahoo Finance. Aceita ações americanas e europeias (Xetra, Paris, Amesterdão, Lisboa, Madrid, Milão, Zurique, Copenhaga...) e ETFs/ETCs europeus. ETFs americanos (SPY, QQQ) não são permitidos a particulares na UE.",
+    cfd: "Pesquisa no catálogo e, com a conta cTrader ligada, em todos os instrumentos da tua corretora. O Modo Teste usa preços do Yahoo (futuros e índices), que podem diferir uns pontos dos da corretora.",
+  }[market] || "Procura entre todos os pares da Binance. O radar já vê sozinho as mais negociadas; aqui juntas as que queres acompanhar sempre.";
+  setTimeout(() => $("#assetQuery").focus(), 50);
+  await loadAssets();
+}
+
+function closeAssets() { $("#assetsModal").hidden = true; S.lastDecisionSig = ""; refreshStatus(); }
+
+async function loadAssets() {
+  try {
+    const a = await api("/api/assets");
+    S.assets = a;
+    renderAssetsMine(a);
+    renderAssetsCatalog(a);
+  } catch (e) { toast(e.message, "err"); }
+}
+
+function renderAssetsMine(a) {
+  $("#assetMineCount").textContent = `(${a.mine.length}/${a.max})`;
+  $("#assetMine").innerHTML = a.mine.length ? a.mine.map((m) => `<span class="asset-chip" title="${esc([m.name, m.exchange, m.note].filter(Boolean).join(" · "))}">
+      <b>${esc(m.symbol)}</b>${m.name && m.name !== m.symbol ? `<span class="nm">${esc(m.name)}</span>` : ""}
+      <button data-remove="${esc(m.symbol)}" title="Remover">${icon("x")}</button></span>`).join("")
+    : `<span class="muted small">Ainda não tens ativos na tua lista.</span>`;
+  $$("[data-remove]", $("#assetMine")).forEach((b) => (b.onclick = () => removeAsset(b.dataset.remove)));
+}
+
+function renderAssetsCatalog(a) {
+  const host = $("#assetCatalog");
+  if (a.market === "stocks" || a.market === "cfd") {
+    const cfd = a.market === "cfd";
+    host.innerHTML = `<h3>Catálogo do radar <span class="count">(${a.universe_size} ${cfd ? "instrumentos" : "ativos"})</span></h3>
+      <div class="help">${cfd ? "Categorias que o radar examina automaticamente, à procura de compras e de vendas a descoberto." : `Categorias que o radar examina automaticamente. Em cada análise escolhe as ${a.scan_top} mais negociadas entre as bolsas abertas nesse momento.`}</div>
+      <div class="cat-list">${a.categories.map((c) => `<label class="cat-item"><input type="checkbox" data-cat="${c.key}" ${c.enabled ? "checked" : ""}>
+        <span>${esc(c.label)} (${c.symbols.length})<span class="ex">${esc(c.symbols.slice(0, 6).join(", "))}${c.symbols.length > 6 ? "…" : ""}</span></span></label>`).join("")}</div>
+      ${cfd ? `<div class="help" style="margin-top:10px">${a.broker ? "Conta cTrader ligada: podes adicionar qualquer instrumento da tua corretora (fora do catálogo só funciona no Modo Real)." : "Liga a conta cTrader (Modo Real) para adicionares também instrumentos da tua corretora que não estão no catálogo."}</div>`
+        : `<label class="cat-item" style="margin-top:12px"><input type="checkbox" id="assetDiscovery" ${a.discovery ? "checked" : ""}>
+        <span>Descobertas do dia<span class="ex">Junta as ações americanas grandes (mais de 5 mil milhões de dólares) mais ativas e a subir no dia${a.discoveries.length ? `: ${esc(a.discoveries.slice(0, 8).join(", "))}` : ""}.</span></span></label>`}`;
+    $$("[data-cat]", host).forEach((cb) => (cb.onchange = saveCategories));
+    if ($("#assetDiscovery")) $("#assetDiscovery").onchange = saveCategories;
+  } else {
+    host.innerHTML = `<h3>Sugestões</h3>` + a.catalog.map((c) => `<div class="help" style="margin-top:8px">${esc(c.label)}</div>
+      <div class="quick-add">${c.symbols.map((sym) => `<button class="chip ${a.mine.some((m) => m.symbol === sym) ? "on" : ""}" data-quick="${sym}">${sym}</button>`).join("")}</div>`).join("")
+      + `<div class="help" style="margin-top:10px">O ouro "XAU/USD" é um CFD (produto alavancado) que a Binance não tem e que a API da Trading 212 não permite. O PAXG e o XAUT valem cada um 1 onça de ouro físico e negoceiam 24/7.</div>`;
+    $$("[data-quick]", host).forEach((b) => (b.onclick = () => (b.classList.contains("on") ? removeAsset(b.dataset.quick) : addAsset(b.dataset.quick, b))));
+  }
+}
+
+let assetSearchTimer = null;
+function onAssetQuery() {
+  clearTimeout(assetSearchTimer);
+  const q = $("#assetQuery").value.trim();
+  if (q.length < 2) { $("#assetResults").innerHTML = ""; return; }
+  assetSearchTimer = setTimeout(async () => {
+    $("#assetResults").innerHTML = `<div class="check-item muted"><span class="spinner"></span>A procurar…</div>`;
+    try {
+      const { results } = await api(`/api/assets/search?q=${encodeURIComponent(q)}`);
+      if ($("#assetQuery").value.trim() !== q) return;
+      $("#assetResults").innerHTML = results.length ? results.map((r) => `<div class="asset-row">
+          <div><span class="sym">${esc(r.symbol)}</span><span class="nm">${r.name && r.name !== r.symbol ? esc(r.name) : ""}</span>
+            <div class="meta">${esc(TYPE_PT[r.type] || r.type || "")} · ${esc(r.exchange || "")}${r.volume_24h ? ` · volume 24h ${nf(1).format(r.volume_24h / 1e6)} M` : ""}
+              ${r.why ? ` · <span class="${r.ok ? "warn" : "bad"}">${esc(r.why)}</span>` : ""}</div></div>
+          <button class="btn btn-sm ${r.in_list ? "btn-secondary" : "btn-primary"}" data-add="${esc(r.symbol)}" ${!r.ok || r.in_list ? "disabled" : ""}>${r.in_list ? "Na lista" : "Adicionar"}</button>
+        </div>`).join("") : `<div class="muted small">Nada encontrado para "${esc(q)}".</div>`;
+      $$("[data-add]", $("#assetResults")).forEach((b) => (b.onclick = () => addAsset(b.dataset.add, b)));
+    } catch (e) { $("#assetResults").innerHTML = `<div class="check-item bad">${icon("alert")}<span>${esc(e.message)}</span></div>`; }
+  }, 350);
+}
+
+async function addAsset(symbol, btn) {
+  try {
+    const r = await withBusy(btn, () => api("/api/assets/add", { method: "POST", body: { symbol } }));
+    if (!r) return;
+    if (!r.ok) { toast(`${symbol}: ${r.problems.join("; ")}`, "err", 9000); return; }
+    toast(`${r.symbol} adicionado${r.name && r.name !== r.symbol ? ` (${r.name})` : ""}.${r.warnings.length ? " Atenção: " + r.warnings.join("; ") + "." : ""}`, r.warnings.length ? "info" : "ok", r.warnings.length ? 9000 : 4500);
+    if (btn && btn.dataset.add) { btn.textContent = "Na lista"; btn.disabled = true; btn.className = "btn btn-sm btn-secondary"; }
+    await loadAssets();
+  } catch (e) { toast(e.message, "err", 8000); }
+}
+
+async function removeAsset(symbol) {
+  try {
+    await api("/api/assets/remove", { method: "POST", body: { symbol } });
+    toast(`${symbol} removido da tua lista.`, "ok");
+    $$("[data-add]", $("#assetResults")).filter((b) => b.dataset.add === symbol)
+      .forEach((b) => { b.textContent = "Adicionar"; b.disabled = false; b.className = "btn btn-sm btn-primary"; });
+    await loadAssets();
+  } catch (e) { toast(e.message, "err"); }
+}
+
+async function saveCategories() {
+  const categories = $$("[data-cat]").filter((c) => c.checked).map((c) => c.dataset.cat);
+  try {
+    const r = await api("/api/assets/categories", { method: "POST", body: { categories, discovery: $("#assetDiscovery") ? $("#assetDiscovery").checked : null } });
+    $("#assetsNote").textContent = `O radar vê agora ${r.universe_size} ativos do catálogo.`;
+    await loadAssets();
+  } catch (e) { toast(e.message, "err"); await loadAssets(); }
 }
 
 /* ============================================================ mercados */
@@ -837,13 +987,13 @@ async function onMarketClick(market) {
   const s = S.status;
   if (!s || market === s.market) return;
   if (s.running) {
-    const ok = await confirmDialog({ title: `Mudar para ${market === "stocks" ? "Ações & ETFs" : "Cripto"}?`,
+    const ok = await confirmDialog({ title: `Mudar para ${MARKET_PT[market]}?`,
       text: "O bot vai ser parado. Cada mercado tem a sua carteira e histórico; o novo mercado começa em Modo Teste.", ok: "Parar e mudar" });
     if (!ok) return;
   }
   try {
     await api("/api/market", { method: "POST", body: { market } });
-    toast(market === "stocks" ? "Mercado: Ações & ETFs (Modo Teste)." : "Mercado: Cripto (Modo Teste).", "ok");
+    toast(`Mercado: ${MARKET_PT[market]} (Modo Teste).`, "ok");
   } catch (e) { toast(e.message, "err"); return; }
   S.symbol = null; S.lastDecisionSig = "";
   ["#focusBox", "#aiList", "#positions", "#pendingList", "#symbolTabs"].forEach((id) => { $(id).dataset.key = "-"; $(id).dataset.sig = "-"; });
@@ -856,7 +1006,7 @@ async function onModeClick(mode) {
   if (!s || mode === s.mode) return;
   if (mode === "paper") {
     if (s.running) {
-      const ok = await confirmDialog({ title: "Mudar para o Modo Teste?", text: "O bot em Modo Real vai ser parado. As posições reais abertas ficam na tua conta Binance sem vigilância até voltares ao Modo Real.", ok: "Parar e mudar" });
+      const ok = await confirmDialog({ title: "Mudar para o Modo Teste?", text: `O bot em Modo Real vai ser parado. As posições reais abertas ficam na tua conta ${broker()} sem vigilância do bot até voltares ao Modo Real${s.market === "cfd" ? " (o stop-loss fica na corretora)" : ""}.`, ok: "Parar e mudar" });
       if (!ok) return;
     }
     try { await api("/api/mode", { method: "POST", body: { mode: "paper" } }); toast("Modo Teste ativo.", "ok"); }
@@ -869,7 +1019,22 @@ async function onModeClick(mode) {
 }
 
 function liveBrokerTexts() {
-  const stocks = S.status.market === "stocks";
+  const stocks = S.status.market === "stocks", cfd = S.status.market === "cfd";
+  $("#liveIpBox").hidden = cfd;
+  $("#liveCtrader").hidden = !cfd;
+  $("#liveAccept1").nextElementSibling.textContent = cfd
+    ? "Compreendo que os CFDs usam alavancagem, que posso perder parte ou todo este capital e que nenhum resultado é garantido."
+    : "Compreendo que posso perder parte ou todo este capital e que nenhum resultado é garantido.";
+  $("#liveAccept2").nextElementSibling.textContent = cfd
+    ? "Compreendo que o stop-loss fica na corretora, mas o resto da gestão (trailing, fecho parcial, fecho de sexta) só funciona com a aplicação aberta e o PC ligado."
+    : "Compreendo que os stops só são vigiados enquanto a aplicação estiver aberta e o PC ligado.";
+  if (cfd) {
+    $("#liveSubtitle").textContent = "O bot vai abrir e fechar CFDs (ouro, forex, índices, petróleo; compra e venda a descoberto) na tua conta cTrader.";
+    $("#liveKeysTitle").textContent = "Ligação à cTrader";
+    $("#liveKeysHelp").innerHTML = "A cTrader liga-se por autorização (OAuth): <b>nunca</b> escreves aqui a palavra-passe da corretora, e a API não permite levantamentos. Precisas de uma aplicação gratuita no portal da cTrader (uma vez só).";
+    $("#liveTestnetLabel").innerHTML = "<b>Usar uma conta demo cTrader</b>: ordens a sério com dinheiro fictício, para testar primeiro (recomendado).";
+    return;
+  }
   $("#liveSubtitle").textContent = stocks ? "O bot vai comprar e vender ações e ETFs com o teu dinheiro na Trading 212." : "O bot vai comprar e vender com o teu dinheiro na Binance.";
   $("#liveKeysTitle").textContent = stocks ? "Chaves API da Trading 212" : "Chaves API da Binance";
   $("#liveSecretLabel").textContent = stocks ? "API Secret" : "Secret Key";
@@ -879,12 +1044,39 @@ function liveBrokerTexts() {
   $("#liveTestnetLabel").innerHTML = stocks
     ? "<b>Usar a conta demo da Trading 212</b>: ordens a sério com dinheiro fictício, para testar primeiro (gera a chave com a conta demo selecionada na app)."
     : "<b>Usar a Binance Testnet</b>: ordens reais com dinheiro fictício, para testar primeiro. As chaves são criadas em testnet.binance.vision.";
+  $("#liveIpHelp").innerHTML = stocks
+    ? "Opcional na Trading 212: se restringires a chave a IPs, usa este."
+    : "Na Binance: <b>Gestão de API › Editar restrições › Restrict access to trusted IPs only</b> › cola este IP › Confirmar. "
+      + "É obrigatório para poderes ativar <b>Enable Spot &amp; Margin Trading</b>. O 127.0.0.1 da janela não serve: é este o IP que a Binance vê. "
+      + "Se o IP da tua internet mudar (por exemplo, ao reiniciar o router), tens de o atualizar lá.";
+}
+
+async function loadPublicIp() {
+  $("#liveIp").textContent = "a obter…";
+  try {
+    const { ip } = await api("/api/public-ip");
+    $("#liveIp").textContent = ip || "não foi possível obter (vê em whatismyip.com)";
+    S.publicIp = ip;
+  } catch { $("#liveIp").textContent = "não foi possível obter (vê em whatismyip.com)"; }
+}
+
+async function copyIp() {
+  if (!S.publicIp) return;
+  try {
+    await navigator.clipboard.writeText(S.publicIp);
+    toast(`IP ${S.publicIp} copiado.`, "ok");
+  } catch {
+    const r = document.createRange(); r.selectNodeContents($("#liveIp"));
+    const sel = window.getSelection(); sel.removeAllRanges(); sel.addRange(r);
+    toast("Seleciona e copia o IP com Ctrl+C.", "info");
+  }
 }
 
 function openLiveModal() {
   const s = S.status;
   S.liveCheck = null;
   liveBrokerTexts();
+  if (s.market === "cfd") loadCtrader(); else loadPublicIp();
   $("#liveTestnet").checked = !!s.use_testnet;
   $("#liveCapital").value = Math.round(s.capital_limit);
   $("#liveApiKey").value = ""; $("#liveApiSecret").value = "";
@@ -898,11 +1090,13 @@ function openLiveModal() {
 
 function savedKeyFor(testnet) {
   const k = S.status.keys;
+  if (S.status.market === "cfd") return testnet ? k.ctrader_demo : k.ctrader_live;
   if (S.status.market === "stocks") return testnet ? k.t212_demo : k.t212;
   return testnet ? k.testnet : k.binance;
 }
 
 function updateLiveKeyView() {
+  if (S.status.market === "cfd") { $("#liveSavedKey").hidden = true; $("#liveKeyInputs").hidden = true; return; }
   const saved = savedKeyFor($("#liveTestnet").checked);
   const box = $("#liveSavedKey");
   box.hidden = !saved;
@@ -913,7 +1107,130 @@ function updateLiveKeyView() {
   }
 }
 
+/* ---------------------------------------------------------------- cTrader (CFDs) */
+async function loadCtrader() {
+  let st;
+  try { st = await api("/api/ctrader/status"); } catch (e) { toast(e.message, "err"); return; }
+  S.ct = st;
+  $("#ctRedirect").textContent = st.redirect_uri;
+  $("#ctPortal").href = st.portal;
+  $("#ctAppSaved").hidden = !st.app;
+  $("#ctAppInputs").hidden = !!st.app;
+  if (st.app) {
+    $("#ctAppSaved").innerHTML = `<span>${icon("lock")} Aplicação guardada <span class="mono">${esc(st.client_id || "")}</span></span><button class="btn btn-sm btn-secondary" id="btnCtChangeApp" type="button">Alterar</button>`;
+    $("#btnCtChangeApp").onclick = () => { $("#ctAppSaved").hidden = true; $("#ctAppInputs").hidden = false; $("#ctClientId").focus(); };
+  }
+  $("#btnCtConnect").disabled = !st.app;
+  $("#btnCtConnect").innerHTML = `${icon("link")}${st.token ? "Autorizar de novo" : "Ligar ao cTrader"}`;
+  $("#ctTokenState").innerHTML = st.token
+    ? `<span class="up">${icon("check")} Conta cTrader autorizada</span>${st.token_expires ? ` · renova-se sozinha (atual até ${new Date(st.token_expires * 1000).toLocaleDateString("pt-PT")})` : ""}`
+    : st.app ? "Carrega em \"Ligar ao cTrader\" e autoriza no browser que vai abrir." : "Guarda primeiro a aplicação (Client ID e Secret).";
+  $("#ctAccountBox").hidden = !st.token;
+  if (st.token) await loadCtAccounts();
+}
+
+async function loadCtAccounts(refresh = false) {
+  const sel = $("#ctAccount"), demo = $("#liveTestnet").checked;
+  sel.innerHTML = `<option value="">A carregar as contas…</option>`;
+  try {
+    const r = await api(`/api/ctrader/accounts${refresh ? "?refresh=1" : ""}`);
+    const list = r.accounts.filter((a) => a.is_live !== demo);
+    const cur = demo ? r.demo_account : r.live_account;
+    sel.innerHTML = list.length
+      ? `<option value="">Escolhe a conta ${demo ? "demo" : "real"}…</option>` + list.map((a) =>
+        `<option value="${a.id}" ${a.id === cur ? "selected" : ""}>${esc(a.broker || "cTrader")} · ${esc(String(a.login ?? a.id))} (${a.is_live ? "real" : "demo"})</option>`).join("")
+      : `<option value="">Nenhuma conta ${demo ? "demo" : "real"} autorizada: autoriza de novo e seleciona-a</option>`;
+  } catch (e) { sel.innerHTML = `<option value="">${esc(e.message)}</option>`; }
+}
+
+async function saveCtApp() {
+  const body = { client_id: $("#ctClientId").value.trim(), client_secret: $("#ctClientSecret").value.trim() };
+  if (!body.client_id || !body.client_secret) { toast("Preenche o Client ID e o Secret.", "err"); return; }
+  try {
+    const r = await withBusy($("#btnCtApp"), () => api("/api/ctrader/app", { method: "POST", body }));
+    if (!r) return;
+    $("#ctClientId").value = ""; $("#ctClientSecret").value = "";
+    toast("Aplicação cTrader verificada e guardada.", "ok");
+    await loadCtrader();
+  } catch (e) { toast(e.message, "err", 9000); }
+}
+
+async function ctConnect() {
+  try {
+    const r = await withBusy($("#btnCtConnect"), () => api("/api/ctrader/connect", { method: "POST" }));
+    if (!r) return;
+    $("#ctTokenState").innerHTML = `<span class="spinner" style="display:inline-block;vertical-align:-2px"></span> À espera da autorização no browser… Se não abriu, <a href="${esc(r.url)}" target="_blank" rel="noopener">abre este link</a>.`;
+    toast("Abriu o browser: entra com o teu cTrader ID, escolhe as contas e carrega em \"Allow access\". Depois volta aqui.", "info", 10000);
+    const before = S.ct?.token_expires, t0 = Date.now();
+    clearInterval(S.ctPoll);
+    S.ctPoll = setInterval(async () => {
+      if (Date.now() - t0 > 5 * 60 * 1000 || $("#liveModal").hidden) { clearInterval(S.ctPoll); return; }
+      try {
+        const st = await api("/api/ctrader/status");
+        if (st.token && st.token_expires !== before) {
+          clearInterval(S.ctPoll);
+          toast("Conta cTrader autorizada. Escolhe agora a conta que o bot vai usar.", "ok", 7000);
+          await refreshStatus();
+          await loadCtrader();
+        }
+      } catch { /* tenta outra vez */ }
+    }, 3000);
+  } catch (e) { toast(e.message, "err", 8000); }
+}
+
+async function saveCtToken() {
+  const body = { access_token: $("#ctAccess").value.trim(), refresh_token: $("#ctRefresh").value.trim() };
+  try {
+    const r = await withBusy($("#btnCtToken"), () => api("/api/ctrader/token", { method: "POST", body }));
+    if (!r) return;
+    $("#ctAccess").value = ""; $("#ctRefresh").value = ""; $("#ctManual").open = false;
+    toast(`Tokens guardados: ${r.accounts.length} conta(s) cTrader encontradas.`, "ok");
+    await refreshStatus();
+    await loadCtrader();
+  } catch (e) { toast(e.message, "err", 9000); }
+}
+
+async function verifyCtrader(pick = null) {
+  const btn = $("#btnLiveVerify");
+  $("#liveChecks").innerHTML = `<div class="check-item muted"><span class="spinner"></span>A verificar a conta cTrader…</div>`;
+  try {
+    const testnet = $("#liveTestnet").checked;
+    const r = await withBusy(btn, () => (pick
+      ? api("/api/ctrader/account", { method: "POST", body: { testnet, account_id: pick } })
+      : api("/api/keys/ctrader", { method: "POST", body: { testnet } })));
+    if (!r) return;
+    S.liveCheck = r;
+    const items = [];
+    if (r.usdt_free != null) {
+      items.push(["ok", `Ligado à ${r.broker || "corretora"} · conta ${r.login ?? r.account_id} (${r.testnet ? "demo" : "real"}) em ${r.account_currency || r.quote}`]);
+      items.push(["ok", `Saldo: ${fmtMoney(r.usdt_free)} ${r.quote}${r.leverage ? ` · alavancagem máxima 1:${nf(0).format(r.leverage)}` : ""}`]);
+      const names = { XAUUSD: "Ouro", EURUSD: "EUR/USD", US500: "S&P 500" };
+      Object.entries(r.symbols || {}).forEach(([k, v]) => items.push(v ? ["ok", `${names[k] || k}: ${v}`] : ["info", `${names[k] || k}: não encontrado nesta corretora (o bot usa os outros instrumentos)`]));
+      if (r.usdt_free < 300) items.push(["info", "Com menos de ~300 de saldo, o ouro (mínimo 1 onça) e alguns índices podem não caber no risco por trade: o bot salta esses e usa forex, que permite posições mais pequenas."]);
+    }
+    r.problems.forEach((t) => items.push(["bad", t]));
+    $("#liveChecks").innerHTML = items.map(([k, t]) => `<div class="check-item ${k}">${icon(k === "ok" ? "check" : k === "info" ? "chevron" : "alert")}<span>${esc(t)}</span></div>`).join("");
+    if (pick) await refreshStatus();
+  } catch (e) {
+    S.liveCheck = null;
+    $("#liveChecks").innerHTML = `<div class="check-item bad">${icon("alert")}<span>${esc(e.message)}</span></div>`;
+  }
+  validateLive();
+}
+
+async function copyRedirect() {
+  const uri = $("#ctRedirect").textContent;
+  try { await navigator.clipboard.writeText(uri); toast("Redirect URI copiado.", "ok"); }
+  catch {
+    const r = document.createRange(); r.selectNodeContents($("#ctRedirect"));
+    const sel = window.getSelection(); sel.removeAllRanges(); sel.addRange(r);
+    toast("Seleciona e copia com Ctrl+C.", "info");
+  }
+}
+
 async function verifyLive(silent = false) {
+  if ($("#btnLiveVerify").disabled) return;  // já há uma verificação a decorrer
+  if (S.status.market === "cfd") return verifyCtrader();
   const testnet = $("#liveTestnet").checked;
   const body = { testnet, api_key: $("#liveApiKey").value.trim(), api_secret: $("#liveApiSecret").value.trim() };
   const usingInputs = !$("#liveKeyInputs").hidden;
@@ -938,7 +1255,38 @@ async function verifyLive(silent = false) {
     }
     r.problems.filter((p) => r.usdt_free == null || !/LEVANTAMENTOS|spot/i.test(p)).forEach((p) => items.push(["bad", p]));
     if (r.withdrawals_enabled) items.push(["bad", "Desativa 'Enable Withdrawals' na Binance e verifica de novo."]);
-    $("#liveChecks").innerHTML = items.map(([k, t]) => `<div class="check-item ${k}">${icon(k === "ok" ? "check" : "alert")}<span>${esc(t)}</span></div>`).join("");
+    if (r.spot_trading_enabled === false) items.push(["bad", "Na Binance (Gestão de API › Editar restrições) escolhe 'Restrict access to trusted IPs only', "
+      + `escreve o IP público da tua internet${r.public_ip ? ` (${r.public_ip})` : ""} e só depois ativa 'Enable Spot & Margin Trading'. `
+      + "O 127.0.0.1 é só o endereço desta janela: não é o IP que a Binance vê."]);
+    if (r.public_ip) { S.publicIp = r.public_ip; $("#liveIp").textContent = r.public_ip; }
+    const quote = r.quote || Q();
+    const capital = parseFloat($("#liveCapital").value) || 0;
+    if (r.usdt_free != null && !r.testnet && S.status.market !== "stocks" && r.usdt_free < Math.max(10, capital)) {
+      const fmtBal = (b) => Object.entries(b || {}).map(([c, v]) => `${nf(v >= 100 ? 2 : 6).format(v)} ${c}`).join(", ");
+      const spotTxt = fmtBal(r.spot_balances);
+      const fundTxt = fmtBal(r.funding_balances);
+      items.push(["bad", `O bot negoceia em ${quote} e tens ${fmtMoney(r.usdt_free)} ${quote} livres na carteira Spot.`]);
+      items.push(["info", `Carteira Spot: ${spotTxt || "vazia"}.`]);
+      if (fundTxt) items.push(["info", `Carteira de Financiamento: ${fundTxt}. O bot só usa a Spot: na Binance vai a Carteira › Transferir e passa o dinheiro de Financiamento para Spot.`]);
+      if (quote === "USDC") {
+        items.push(["info", "Para teres USDC: na Binance vai a Negociar › Converter, escolhe de EUR (ou USDT/outra moeda) para USDC e confirma, com a carteira Spot selecionada. Se ainda não tens dinheiro na Binance, deposita EUR primeiro (Comprar cripto › Depositar)."]);
+        if ((r.spot_balances || {}).EUR) items.push(["info", "Também podes pôr o bot a negociar em EUR (Definições › Mercado › Moeda de negociação), mas há muito menos moedas com par em euros."]);
+      }
+      items.push(["info", `Depois carrega em "Verificar ligação" outra vez. O capital do bot (passo 2) não pode ser maior do que o saldo em ${quote}.`]);
+    }
+    if (r.usdt_free == null && S.status.market !== "stocks") {
+      const ip = r.public_ip || S.publicIp || "o IP acima";
+      [
+        `Se a chave tem restrição de IP, o IP ${ip} tem de estar na lista de IPs de confiança dessa chave (e carregar em Confirmar na Binance; às vezes demora 1-2 minutos).`,
+        testnet ? "A opção Testnet está marcada: só funcionam chaves criadas em testnet.binance.vision, não as da Binance normal."
+                : "A opção Testnet está desmarcada: só funcionam chaves da Binance normal, não as da testnet.binance.vision.",
+        "A Secret Key só aparece uma vez, quando crias a chave. Se não a copiaste inteira, apaga a chave e cria outra.",
+        "Cria a chave do tipo 'System generated' (HMAC), não 'Self-generated' (Ed25519/RSA).",
+        "Confirma que 'Enable Reading' está ativo nessa chave.",
+      ].forEach((t) => items.push(["info", t]));
+      if (r.error_code) items.push(["info", `Código de erro da Binance: ${r.error_code}.`]);
+    }
+    $("#liveChecks").innerHTML = items.map(([k, t]) => `<div class="check-item ${k}">${icon(k === "ok" ? "check" : k === "info" ? "chevron" : "alert")}<span>${esc(t)}</span></div>`).join("");
     if (r.saved) { await refreshStatus(); updateLiveKeyView(); }
   } catch (e) {
     S.liveCheck = null;
@@ -951,9 +1299,10 @@ function validateLive() {
   const c = S.liveCheck, testnet = $("#liveTestnet").checked;
   const capital = parseFloat($("#liveCapital").value);
   let hint = "";
-  if (!c || !c.ok) hint = "Verifica primeiro a ligação à Binance.";
+  if (!c || !c.ok) hint = S.status.market === "cfd" ? "Liga e escolhe primeiro a conta cTrader (passo 1)." : `Verifica primeiro a ligação à ${broker()}.`;
   else if (!(capital >= 10)) hint = `O capital mínimo é 10 ${Q()}.`;
-  else if (!testnet && capital > c.usdt_free) hint = `O capital é maior do que o saldo livre (${fmtMoney(c.usdt_free)} ${Q()}).`;
+  else if (!testnet && c.usdt_free < 10) hint = S.status.market === "crypto" ? `Não tens ${Q()} livres na carteira Spot (${fmtMoney(c.usdt_free)}). Vê as instruções no passo 1.` : `A conta não tem saldo suficiente (${fmtMoney(c.usdt_free)} ${Q()}).`;
+  else if (!testnet && capital > c.usdt_free) hint = `O capital é maior do que o saldo livre (${fmtMoney(c.usdt_free)} ${Q()}). Baixa o valor no passo 2.`;
   else if (!$("#liveAccept1").checked || !$("#liveAccept2").checked) hint = "Confirma que compreendes os riscos.";
   else if ($("#liveConfirm").value.trim().toUpperCase() !== "REAL") hint = "Escreve REAL para confirmar.";
   $("#liveHint").textContent = hint;
@@ -984,11 +1333,11 @@ const PROFILE_INFO = {
 };
 
 const SETTINGS_LAYOUT = [
-  { title: "Escolha das moedas", showIf: (d) => !(S.settings.market === "stocks" && d.STOCK_STRATEGY === "tendencia"), fields: [
+  { title: "Escolha dos ativos", showIf: (d) => !(S.settings.market === "stocks" && d.STOCK_STRATEGY === "tendencia"), fields: [
     { key: "AUTO_SELECT", type: "toggle", label: "Escolha automática (recomendado)",
-      help: "Em cada análise o bot examina as moedas mais negociadas, a IA gestora escolhe as melhores para aquele momento e a lista vai mudando sozinha." },
-    { key: "SCAN_UNIVERSE", type: "num", label: "Moedas examinadas", step: 5 },
-    { key: "SCAN_TOP", type: "num", label: "Moedas analisadas a fundo por ciclo", step: 1, profile: true },
+      help: "Em cada análise o bot examina os ativos mais negociados, a IA gestora escolhe os melhores para aquele momento e a lista vai mudando sozinha." },
+    { key: "SCAN_UNIVERSE", type: "num", label: "Ativos examinados", step: 5 },
+    { key: "SCAN_TOP", type: "num", label: "Ativos analisados a fundo por ciclo", step: 1, profile: true },
     { key: "SCAN_MIN_SCORE", type: "num", label: "Pontuação técnica mínima (0-100)", step: 5 },
   ] },
   { title: "Ações e ETFs", showIf: () => S.settings.market === "stocks", fields: [
@@ -1000,15 +1349,24 @@ const SETTINGS_LAYOUT = [
     { key: "EARNINGS_BLACKOUT_DAYS", type: "num", label: "Sem entradas antes dos resultados", unit: "dias", step: 1, showIf: (d) => d.STOCK_STRATEGY !== "tendencia" },
     { key: "EXIT_BEFORE_EARNINGS", type: "toggle", label: "Fechar posições antes dos resultados", showIf: (d) => d.STOCK_STRATEGY !== "tendencia",
       help: "Os resultados trimestrais podem fazer o preço saltar 10% durante a noite, por cima de qualquer stop." },
-    { key: "STOCK_UNIVERSE", type: "textarea", label: "Ações e ETFs que o radar examina", showIf: (d) => d.STOCK_STRATEGY !== "tendencia",
-      help: "Tickers do Yahoo Finance separados por vírgulas. Ações americanas (AAPL) e ETFs UCITS europeus (SXR8.DE). ETFs americanos como SPY não são permitidos a particulares na UE." },
-    { key: "STOCK_ASSETS", type: "chips-stocks", label: "Ativos fixos", showIf: (d) => !d.AUTO_SELECT && d.STOCK_STRATEGY !== "tendencia" },
+    { key: "_assets", type: "assets-button", label: "Ações e ETFs analisados", showIf: (d) => d.STOCK_STRATEGY !== "tendencia",
+      help: "Catálogo por categorias, descobertas do dia e os teus próprios ativos (qualquer ação ou ETF, com pesquisa)." },
+  ] },
+  { title: "CFDs (cTrader)", showIf: () => S.settings.market === "cfd", fields: [
+    { key: "CFD_ALLOW_SHORT", type: "toggle", label: "Vender a descoberto (apostar na descida)",
+      help: "O bot também abre vendas quando a tendência é de queda (ganha se o preço descer). Desligado, só compra." },
+    { key: "CFD_CLOSE_BEFORE_WEEKEND", type: "toggle", label: "Fechar tudo antes do fim de semana",
+      help: "Fecha as posições à sexta às 20:30 UTC e não abre novas depois das 19:00: evita os saltos de preço na abertura de segunda-feira." },
+    { key: "CFD_CURRENCY", type: "seg", label: "Moeda da conta", options: [["EUR", "EUR"], ["USD", "USD"]],
+      help: "No Modo Real passa a ser automaticamente a moeda da tua conta cTrader." },
+    { key: "_assets", type: "assets-button", label: "Instrumentos analisados",
+      help: "Ouro, prata, forex, índices e petróleo por categorias, mais os teus próprios instrumentos." },
   ] },
   { title: "Mercado", fields: [
-    { key: "QUOTE", type: "seg", label: "Moeda de negociação", showIf: () => S.settings.market !== "stocks", options: [["USDC", "USDC"], ["EUR", "EUR"], ["USDT", "USDT"]],
+    { key: "QUOTE", type: "seg", label: "Moeda de negociação", showIf: () => S.settings.market === "crypto", options: [["USDC", "USDC"], ["EUR", "EUR"], ["USDT", "USDT"]],
       help: "Na União Europeia a Binance não permite USDT: usa USDC (≈ 1 dólar, muitos pares) ou EUR (poucos pares)." },
-    { key: "ASSETS", type: "chips", label: "Pares fixos (sempre acompanhados)", showIf: (d) => !d.AUTO_SELECT && S.settings.market !== "stocks",
-      help: "Até 8. O radar junta as melhores oportunidades das outras moedas." },
+    { key: "_assets", type: "assets-button", label: "Os teus ativos", showIf: () => S.settings.market === "crypto",
+      help: "Adiciona as criptomoedas que queres acompanhar sempre (ex.: PAXG = ouro). O radar junta-lhes as mais negociadas." },
     { key: "PRIMARY_TIMEFRAME", type: "seg", label: "Frequência de análise", profile: true, options: [["15m", "15 min"], ["1h", "1 hora"], ["4h", "4 horas"]],
       stocksOptions: [["15m", "15 min"], ["1h", "1 hora"]],
       help: "A IA analisa no fecho de cada vela. Mais frequente = mais oportunidades e mais custo." },
@@ -1034,16 +1392,16 @@ const SETTINGS_LAYOUT = [
       help: "Quanto perdes se o stop for atingido (ex.: 0,50). No alvo ganhas normalmente 1,5 a 3 vezes isto." },
     { key: "MAX_POSITION_PCT", type: "num", label: "Tamanho máximo por posição", unit: "%", step: 5 },
     { key: "MAX_OPEN_POSITIONS", type: "num", label: "Posições em simultâneo", step: 1, profile: true },
-    { key: "MIN_CONFIDENCE", type: "num", label: "Confiança mínima para comprar", step: 0.01, profile: true, help: "Entre 0,5 e 0,95. Mais baixo = mais trades." },
+    { key: "MIN_CONFIDENCE", type: "num", label: "Confiança mínima para entrar", step: 0.01, profile: true, help: "Entre 0,5 e 0,95. Mais baixo = mais trades." },
     { key: "MIN_RISK_REWARD", type: "num", label: "Alvo mínimo (x o risco)", step: 0.1, profile: true },
     { key: "PENDING_ORDER_CANDLES", type: "num", label: "Validade das ordens pendentes", unit: "velas", step: 1 },
     { key: "MAX_DAILY_LOSS_PCT", type: "num", label: "Perda diária máxima", unit: "%", step: 0.5, help: "Ao atingir, o bot não abre mais posições nesse dia." },
-    { key: "MAX_DRAWDOWN_PCT", type: "num", label: "Queda máxima desde o pico", unit: "%", step: 1, help: "Ao atingir, o bot bloqueia compras até desbloqueares." },
+    { key: "MAX_DRAWDOWN_PCT", type: "num", label: "Queda máxima desde o pico", unit: "%", step: 1, help: "Ao atingir, o bot bloqueia novas entradas até desbloqueares." },
     { key: "COOLDOWN_AFTER_LOSS_MINUTES", type: "num", label: "Pausa num par após perda", unit: "min", step: 30 },
   ] },
   { title: "Técnicas dinâmicas de saída e entrada", fields: [
-    { key: "PARTIAL_TP_R", type: "num", label: "Vender parte ao ganhar", unit: "R", step: 0.25, help: "R = valor arriscado. Ao ganhar isto, vende uma parte e põe o stop no preço de entrada." },
-    { key: "PARTIAL_TP_PCT", type: "num", label: "Parte a vender", unit: "%", step: 10, help: "0 desliga a venda parcial." },
+    { key: "PARTIAL_TP_R", type: "num", label: "Fechar parte ao ganhar", unit: "R", step: 0.25, help: "R = valor arriscado. Ao ganhar isto, fecha uma parte e põe o stop no preço de entrada." },
+    { key: "PARTIAL_TP_PCT", type: "num", label: "Parte a fechar", unit: "%", step: 10, help: "0 desliga o fecho parcial." },
     { key: "TIME_STOP_CANDLES", type: "num", label: "Fechar trades parados ao fim de", unit: "velas", step: 4, help: "Liberta capital de trades que não andam (0 desliga)." },
     { key: "LOSS_STREAK_REDUCE", type: "num", label: "Reduzir risco após perdas seguidas", step: 1, help: "Depois de N perdas seguidas arrisca metade até voltar a ganhar (0 desliga)." },
     { key: "EVENT_BLACKOUT_BEFORE_MIN", type: "num", label: "Pausa antes de eventos macro", unit: "min", step: 15, help: "Sem novas entradas perto de anúncios da Fed, inflação, emprego..." },
@@ -1083,7 +1441,8 @@ function renderSettings() { S.draft = JSON.parse(JSON.stringify(S.settings.value
 function estimateText(d) {
   if (S.settings.market === "stocks" && d.STOCK_STRATEGY === "tendencia") return "Estratégia de tendência: não usa IA (custo zero em OpenAI). Poucos trades por mês.";
   const tfMin = { "15m": 15, "1h": 60, "4h": 240 }[d.PRIMARY_TIMEFRAME] || 60;
-  const perCycle = d.AUTO_SELECT ? Number(d.SCAN_TOP) + 1 : d.ASSETS.length + (d.SCANNER_ENABLED ? Number(d.SCAN_TOP) : 0);
+  const mine = { stocks: d.STOCK_ASSETS, cfd: d.CFD_ASSETS }[S.settings.market] || d.ASSETS || [];
+  const perCycle = d.AUTO_SELECT ? Number(d.SCAN_TOP) + 1 : mine.length + (d.SCANNER_ENABLED ? Number(d.SCAN_TOP) : 0);
   const perHour = (perCycle * 60 / tfMin) * Number(d.DECISION_VOTES || 1);
   return `Até ~${nf(0).format(perHour)} análises da IA por hora (menos quando não há setups técnicos), mais o resumo de notícias.`;
 }
@@ -1091,7 +1450,7 @@ function estimateText(d) {
 function paintSettings() {
   const { options: o } = S.settings;
   const draft = S.draft;
-  const q = draft.QUOTE || Q();
+  const q = { stocks: draft.STOCK_CURRENCY, cfd: draft.CFD_CURRENCY }[S.settings.market] || draft.QUOTE || Q();
   const field = (f) => {
     if (f.showIf && !f.showIf(draft)) return "";
     const val = draft[f.key];
@@ -1100,6 +1459,10 @@ function paintSettings() {
     if (f.type === "chips") {
       return `<div class="field"><span class="field-label">${f.label}</span><div class="chips" data-key="${f.key}">` +
         o.assets.map((a) => `<button class="chip ${val.includes(a) ? "on" : ""}" data-asset="${a}">${a}</button>`).join("") + `</div>${help}</div>`;
+    }
+    if (f.type === "assets-button") {
+      return `<div class="field-inline"><div class="field-text"><span class="field-label">${f.label}</span>${help}</div>
+        <button class="btn btn-sm btn-secondary" type="button" data-open-assets>Gerir ativos</button></div>`;
     }
     if (f.type === "textarea") {
       return `<div class="field"><label class="field-label" for="f-${f.key}">${f.label}</label>
@@ -1143,7 +1506,9 @@ function paintSettings() {
         <div class="help">É testada antes de ser guardada. Fica só no ficheiro .env deste PC.</div></div>
       <div class="key-row"><span>Binance</span><span class="mono">${esc(s.keys.binance || "não configurada")}</span></div>
       <div class="key-row"><span>Binance Testnet</span><span class="mono">${esc(s.keys.testnet || "não configurada")}</span></div>
-      <div class="help">As chaves da Binance configuram-se ao ativar o Modo Real.</div>
+      <div class="key-row"><span>Trading 212</span><span class="mono">${esc(s.keys.t212 || s.keys.t212_demo || "não configurada")}</span></div>
+      <div class="key-row"><span>cTrader</span><span class="mono">${esc(s.ctrader.token ? "autorizado" : s.ctrader.app ? "aplicação guardada, falta autorizar" : "não configurado")}</span></div>
+      <div class="help">As chaves das corretoras configuram-se ao ativar o Modo Real de cada mercado.</div>
     </div>
     <div class="set-section"><h3>Zona de perigo</h3>
       <div class="danger-zone">
@@ -1179,7 +1544,7 @@ function paintSettings() {
     $$("button", seg).forEach((x) => x.classList.toggle("active", x === b));
     const raw = b.dataset.val;
     draft[seg.dataset.key] = isNaN(Number(raw)) ? raw : Number(raw);
-    if (["RISK_MODE", "QUOTE", "STOCK_STRATEGY"].includes(seg.dataset.key)) { paintSettings(); markDirty(); return; }
+    if (["RISK_MODE", "QUOTE", "STOCK_STRATEGY", "CFD_CURRENCY"].includes(seg.dataset.key)) { paintSettings(); markDirty(); return; }
     touched(seg.dataset.profile === "1");
   })));
   $$("select[data-key]", body).forEach((el) => (el.onchange = () => { draft[el.dataset.key] = el.value; touched(false); }));
@@ -1192,6 +1557,7 @@ function paintSettings() {
     el.oninput = () => { draft[el.dataset.key] = parseFloat(el.value); $("#estimate").textContent = estimateText(draft); markDirty(); };
     el.onchange = () => touched(el.dataset.profile === "1");
   });
+  $$("[data-open-assets]", body).forEach((b) => (b.onclick = () => { closeSettings(); openAssets(); }));
   $("#btnSaveOpenai").onclick = saveOpenaiKey;
   $("#btnResetTest").onclick = resetTest;
 }
@@ -1242,6 +1608,10 @@ function bind() {
   $("#btnAnalyze").onclick = analyzeNow;
   $("#btnCloseAll").onclick = closeAll;
   $("#btnScan").onclick = scanNow;
+  $("#btnAssets").onclick = openAssets;
+  $("#btnAssets2").onclick = openAssets;
+  $("#assetQuery").oninput = onAssetQuery;
+  $$("[data-close-assets]").forEach((b) => (b.onclick = closeAssets));
   $("#btnSettings").onclick = openSettings;
   $("#btnTheme").onclick = () => setTheme(getTheme() === "dark" ? "light" : "dark");
   $$("[data-close-drawer]").forEach((b) => (b.onclick = closeSettings));
@@ -1252,8 +1622,19 @@ function bind() {
 
 
   $$("[data-close-modal]").forEach((b) => (b.onclick = () => ($("#liveModal").hidden = true)));
-  $("#liveTestnet").onchange = () => { S.liveCheck = null; $("#liveChecks").innerHTML = ""; updateLiveKeyView(); validateLive(); if (savedKeyFor($("#liveTestnet").checked)) verifyLive(true); };
+  $("#liveTestnet").onchange = () => {
+    S.liveCheck = null; $("#liveChecks").innerHTML = ""; updateLiveKeyView(); validateLive();
+    if (S.status.market === "cfd" && S.ct?.token) loadCtAccounts();
+    if (savedKeyFor($("#liveTestnet").checked)) verifyLive(true);
+  };
+  $("#btnCopyRedirect").onclick = copyRedirect;
+  $("#btnCtApp").onclick = saveCtApp;
+  $("#btnCtConnect").onclick = ctConnect;
+  $("#btnCtToken").onclick = saveCtToken;
+  $("#btnCtAccounts").onclick = () => loadCtAccounts(true);
+  $("#ctAccount").onchange = () => { const id = Number($("#ctAccount").value); if (id) verifyCtrader(id); };
   $("#btnLiveVerify").onclick = () => verifyLive(false);
+  $("#btnCopyIp").onclick = copyIp;
   ["#liveCapital", "#liveAccept1", "#liveAccept2", "#liveConfirm"].forEach((id) => ($(id).oninput = validateLive));
   ["#liveAccept1", "#liveAccept2"].forEach((id) => ($(id).onchange = validateLive));
   $("#btnLiveActivate").onclick = activateLive;
@@ -1262,6 +1643,7 @@ function bind() {
     if (e.key !== "Escape") return;
     if (!$("#confirmModal").hidden) $("#confirmCancel").click();
     else if (!$("#liveModal").hidden) $("#liveModal").hidden = true;
+    else if (!$("#assetsModal").hidden) closeAssets();
     else if ($("#drawer").classList.contains("open")) closeSettings();
   });
 }

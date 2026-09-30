@@ -109,7 +109,8 @@ class Trading212Broker:
         exact = [i for i in insts if i.get("ticker") == f"{base}{suffix}"]
         by_name = [i for i in insts if (i.get("shortName") or "").upper() == base and i.get("ticker", "").endswith(suffix)]
         by_ccy = [i for i in by_name if i.get("currencyCode") == ccy]
-        pick = (exact or by_ccy or by_name or [None])[0]
+        any_suffix = [i for i in insts if (i.get("shortName") or "").upper() == base and i.get("currencyCode") == ccy]
+        pick = (exact or by_ccy or by_name or any_suffix or [None])[0]
         if not pick:
             raise OrderError(f"{symbol} não está disponível na Trading 212.")
         self._map[symbol] = pick["ticker"]

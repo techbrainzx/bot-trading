@@ -1,10 +1,12 @@
 """Execução de ordens: simulada (paper) ou numa exchange real/testnet via ccxt."""
 import logging
+import re
 import time
 import uuid
 from dataclasses import dataclass
 
 import ccxt
+import requests
 
 import config
 from .market import retry
@@ -16,9 +18,12 @@ log = logging.getLogger("bot")
 class Fill:
     qty: float          # quantidade (moeda base) que fica na posição / que foi vendida
     price: float        # preço médio de execução
-    cash_delta: float   # variação de USDT (negativa numa compra)
-    fee: float          # comissão estimada em USDT
-    order_id: str = ""
+    cash_delta: float   # variação do saldo na moeda da conta (negativa numa compra)
+    fee: float          # comissão estimada na moeda da conta
+    order_id: str = ""  # em CFDs: id da posição na corretora
+    margin: float = 0.0          # CFDs: margem reservada pela posição
+    stop: float | None = None    # CFDs: stop-loss colocado na corretora
+    swap: float = 0.0            # CFDs: financiamento pago/recebido (no fecho)
 
 
 class OrderError(Exception):
@@ -58,6 +63,60 @@ class PaperBroker:
         return Fill(qty, px, value - fee, fee, f"paper-{uuid.uuid4().hex[:10]}")
 
 
+class CfdPaperBroker:
+    """CFDs simulados (Modo Teste): compra ou venda a descoberto com margem, spread e comissão.
+    Numa CFD não se paga o valor todo: fica reservada a margem (ex.: 5% no ouro) e o lucro/prejuízo é
+    quantidade x variação do preço."""
+    name = "paper"
+
+    def __init__(self, spec, fx, fee_pct: float | None = None):
+        self.spec = spec                 # símbolo -> {min_qty, step, margin_rate, spread, quote}
+        self.fx = fx                     # moeda de cotação -> moeda da conta
+        self.fee_pct = config.CFD_FEE_PCT if fee_pct is None else fee_pct
+
+    def available_quote(self):
+        return None
+
+    def min_order_value(self, symbol: str) -> float:
+        return 0.0
+
+    def open(self, symbol: str, side: str, qty: float, price: float, stop: float | None = None,
+             take_profit: float | None = None) -> Fill:
+        sp = self.spec(symbol)
+        s = 1 if side == "long" else -1
+        px = price + s * sp.get("spread", 0) / 2  # compra no ask, venda no bid
+        step = sp.get("step") or 0
+        if step:
+            qty = round(int(qty / step + 1e-9) * step, 8)
+        if qty < sp.get("min_qty", 0) - 1e-12 or qty <= 0:
+            raise OrderError(f"{symbol}: quantidade {qty:g} abaixo do mínimo ({sp.get('min_qty')})")
+        fx = self.fx(symbol)
+        notional = qty * px * fx
+        margin = notional * sp["margin_rate"]
+        fee = notional * self.fee_pct / 100
+        return Fill(qty, px, -(margin + fee), fee, f"paper-{uuid.uuid4().hex[:10]}", margin=margin, stop=stop)
+
+    def close(self, symbol: str, pos: dict, qty: float, price: float) -> Fill:
+        sp = self.spec(symbol)
+        s = 1 if pos.get("side", "long") == "long" else -1
+        px = price - s * sp.get("spread", 0) / 2
+        qty = min(qty, pos["qty"])
+        fx = self.fx(symbol)
+        gross = s * qty * (px - pos["entry_price"]) * fx
+        fee = qty * px * fx * self.fee_pct / 100
+        margin_part = pos.get("margin", 0.0) * qty / pos["qty"]
+        return Fill(qty, px, margin_part + gross - fee, fee, f"paper-{uuid.uuid4().hex[:10]}")
+
+    def recover_close(self, symbol: str, pos: dict):
+        return None
+
+    def gone(self, positions: dict) -> list:
+        return []
+
+    def amend(self, symbol: str, pos: dict) -> bool:
+        return True
+
+
 def make_exchange(exchange_id: str, api_key: str, secret: str, sandbox: bool):
     ex = getattr(ccxt, exchange_id)({
         "apiKey": api_key,
@@ -70,8 +129,20 @@ def make_exchange(exchange_id: str, api_key: str, secret: str, sandbox: bool):
     return ex
 
 
+def public_ip() -> str:
+    """IP público desta ligação à internet (o que a Binance vê, não o 127.0.0.1 da aplicação)."""
+    try:
+        return requests.get("https://api.ipify.org", timeout=5).text.strip()
+    except requests.RequestException:
+        return ""
+
+
 def friendly_error(e: Exception) -> str:
     if isinstance(e, ccxt.AuthenticationError):
+        seen = re.search(r"request ip:\s*([0-9a-fA-F.:]+)", str(e))  # a Binance diz de que IP veio o pedido
+        if seen:
+            return (f"A Binance recusou o pedido vindo do IP {seen.group(1)}. Se a chave tem restrição de IP, "
+                    "acrescenta este IP à lista de IPs de confiança; senão confirma a API Key e o Secret.")
         return "Chaves inválidas ou sem permissão (confirma a API Key, o Secret e as restrições de IP)."
     if isinstance(e, ccxt.PermissionDenied):
         return "A chave não tem as permissões necessárias."
@@ -92,8 +163,25 @@ def verify_keys(exchange_id: str, api_key: str, secret: str, sandbox: bool) -> d
         bal = retry(ex.fetch_balance)
         result["usdt_free"] = float(bal["free"].get(config.QUOTE) or 0)
         result["quote"] = config.QUOTE
+        # o que existe na conta (para explicar porque o saldo em USDC pode estar a zero)
+        spot = {c: float(v) for c, v in (bal.get("total") or {}).items() if v and float(v) > 1e-8}
+        result["spot_balances"] = dict(sorted(spot.items(), key=lambda kv: -kv[1])[:8])
+        if not sandbox:
+            try:
+                fund = ex.fetch_balance({"type": "funding"})
+                result["funding_balances"] = {c: float(v) for c, v in (fund.get("total") or {}).items()
+                                              if v and float(v) > 1e-8}
+            except Exception as e:
+                log.debug("Carteira de financiamento indisponível: %s", e)
     except Exception as e:
+        msg = str(e)  # a resposta da Binance não inclui a chave nem o segredo
+        log.warning("A Binance%s recusou a verificação das chaves: %s", " Testnet" if sandbox else "", msg[:300])
         result["problems"].append(friendly_error(e))
+        seen = re.search(r"request ip:\s*([0-9a-fA-F.:]+)", msg)
+        result["public_ip"] = seen.group(1) if seen else public_ip()
+        result["auth_failed"] = isinstance(e, (ccxt.AuthenticationError, ccxt.PermissionDenied))
+        code = re.search(r'"code"\s*:\s*(-?\d+)', msg)
+        result["error_code"] = code.group(1) if code else None
         return result
     if not sandbox:
         try:
@@ -107,6 +195,7 @@ def verify_keys(exchange_id: str, api_key: str, secret: str, sandbox: bool) -> d
             result["problems"].append("Por segurança, desativa a permissão de LEVANTAMENTOS (Enable Withdrawals) "
                                       "desta chave na Binance.")
         if not result["spot_trading_enabled"]:
+            result["public_ip"] = public_ip()  # a Binance só deixa ativar o trading em chaves com IP restrito
             result["problems"].append("Ativa a permissão de trading spot (Enable Spot & Margin Trading) nesta chave.")
     result["ok"] = not result["problems"]
     return result

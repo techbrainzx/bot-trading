@@ -1,8 +1,8 @@
 """
 Notícias e contexto macro, de várias fontes:
-- manchetes RSS de 13 sites de cripto (grátis, atualizadas a cada 10 min);
+- manchetes RSS de 11-13 sites (cripto, bolsa ou forex/matérias-primas, conforme o mercado; grátis, a cada 10 min);
 - calendário económico (Fed, inflação, emprego...) da ForexFactory;
-- dados globais do mercado (CoinGecko);
+- dados globais do mercado (CoinGecko em cripto; dólar, juros, VIX, S&P 500, ouro e petróleo nos outros);
 - resumo da IA com pesquisa na web, por ativo (só para os ativos que vão ser analisados).
 """
 import email.utils
@@ -50,6 +50,29 @@ STOCK_FEEDS = {
     "Fortune": "https://fortune.com/feed/",
 }
 YAHOO_TICKER_RSS = "https://feeds.finance.yahoo.com/rss/2.0/headline?s={ticker}&region=US&lang=en-US"
+
+CFD_FEEDS = {
+    "FXStreet": "https://www.fxstreet.com/rss/news",
+    "FXStreet Análise": "https://www.fxstreet.com/rss/analysis",
+    "investingLive (ForexLive)": "https://investinglive.com/feed/news",
+    "Investing.com Forex": "https://www.investing.com/rss/news_1.rss",
+    "Investing.com Matérias-primas": "https://www.investing.com/rss/news_11.rss",
+    "Investing.com Economia": "https://www.investing.com/rss/news_14.rss",
+    "OilPrice": "https://oilprice.com/rss/main",
+    "Google News (ouro, forex, petróleo)": "https://news.google.com/rss/search?q=gold+OR+forex+OR+%22oil+prices%22+OR+"
+                                           "%22Federal+Reserve%22+when:1d&hl=en-US&gl=US&ceid=US:en",
+    "WSJ Markets": "https://feeds.content.dowjones.io/public/rss/RSSMarketsMain",
+    "MarketWatch": "https://feeds.content.dowjones.io/public/rss/mw_topstories",
+    "Yahoo Finance": "https://finance.yahoo.com/news/rssindex",
+}
+# indicadores globais (Yahoo) para ações e CFDs
+MACRO_TICKERS = {"dxy": ("DX-Y.NYB", "Índice do dólar (DXY)"), "us10y_yield": ("^TNX", "Juro a 10 anos EUA (%)"),
+                 "vix": ("^VIX", "VIX (medo)"), "sp500_futures": ("ES=F", "S&P 500 (futuros)"),
+                 "gold": ("GC=F", "Ouro"), "wti_oil": ("CL=F", "Petróleo WTI"), "eurusd": ("EURUSD=X", "EUR/USD")}
+
+
+def feeds_for(market: str) -> dict:
+    return {"stocks": STOCK_FEEDS, "cfd": CFD_FEEDS}.get(market, FEEDS)
 
 # Nomes por extenso (sem distinguir maiúsculas). O ticker (ex.: "SOL") é procurado só em maiúsculas.
 ASSET_NAMES = {
@@ -118,10 +141,22 @@ def _parse_date(s: str | None) -> float | None:
         return None
 
 
-def _matcher(asset: str, stocks: bool = False):
-    if stocks:
+def _matcher(asset: str, stocks: bool = False, cfd: bool = False):
+    if cfd:
+        from .catalog import CFD_SPECS
+        spec = CFD_SPECS.get(asset) or {}
+        names = [n for n in spec.get("news", []) if len(n) > 3]
+        parts = [rf"\b{re.escape(asset)}\b"]
+        if len(asset) == 6 and asset.isalpha():  # XAUUSD / EURUSD também aparece como XAU/USD, EUR/USD
+            parts.append(rf"\b{asset[:3]}\s?/\s?{asset[3:]}\b")
+        parts += [rf"\b{re.escape(n)}\b" for n in spec.get("news", []) if len(n) <= 3]  # tickers curtos (XAU, BoE)
+    elif stocks:
+        from .assets import display_name
         from .stockdata import STOCK_NAMES
-        names = STOCK_NAMES.get(asset, [])
+        names = list(STOCK_NAMES.get(asset, []))
+        extra = display_name(asset)
+        if extra and not names:  # ex.: "Rheinmetall AG" -> "Rheinmetall"
+            names = [extra.split(",")[0].replace(" AG", "").replace(" SA", "").replace(" Inc.", "").replace(" Corp", "").strip()]
         base = asset.split(".")[0]
         # em ações só aceita o ticker em formatos inequívocos: (AAPL), $AAPL, NASDAQ:AAPL
         parts = [rf"\({re.escape(base)}\)", rf"\${re.escape(base)}\b", rf":\s?{re.escape(base)}\b"]
@@ -140,7 +175,7 @@ class NewsHub:
     def __init__(self, client=None, model: str = "gpt-5.4-mini", refresh_minutes: int = 60, on_usage=None,
                  market: str = "crypto"):
         self.market = market
-        self.feeds = STOCK_FEEDS if market == "stocks" else FEEDS
+        self.feeds = feeds_for(market)
         self._ticker_news: dict[str, tuple[float, list]] = {}
         self.client = client
         self.model = model
@@ -149,7 +184,6 @@ class NewsHub:
         self.lock = threading.Lock()
         self._items: list[dict] = []
         self._feeds_ts = 0.0
-        self._calendar = (0.0, [])
         self._global = (0.0, None)
         self._ai: dict[str, tuple[float, dict]] = {}
         self.feed_status: dict[str, str] = {}
@@ -206,11 +240,12 @@ class NewsHub:
             log.warning("Falha a atualizar notícias RSS: %s", e)
         now = time.time()
         stocks = self.market == "stocks"
-        match = _matcher(asset, stocks) if asset else None
+        cfd = self.market == "cfd"
+        match = _matcher(asset, stocks, cfd) if asset else None
         out = []
         with self.lock:
             items = list(self._items)
-        if asset and stocks:
+        if asset and (stocks or cfd):
             items = sorted(items + self.ticker_news(asset), key=lambda x: -x["ts"])
         for it in items:
             if now - it["ts"] > hours * 3600:
@@ -228,25 +263,36 @@ class NewsHub:
         hit = self._ticker_news.get(symbol)
         if hit and time.time() - hit[0] < 900:
             return hit[1]
-        _, rows, _ = self._fetch_feed((f"Yahoo {symbol.split('.')[0]}", YAHOO_TICKER_RSS.format(ticker=symbol)))
+        ticker = symbol
+        if self.market == "cfd":
+            from .catalog import CFD_SPECS
+            ticker = (CFD_SPECS.get(symbol) or {}).get("yahoo") or symbol
+        _, rows, _ = self._fetch_feed((f"Yahoo {symbol.split('.')[0]}", YAHOO_TICKER_RSS.format(ticker=ticker)))
         for r in rows:
             r["matched"] = True
         self._ticker_news[symbol] = (time.time(), rows)
         return rows
 
     # ---------------------------------------------------------------- macro
+    _cal_shared = [0.0, []]           # partilhado por toda a aplicação (o site limita os pedidos)
+    _cal_lock = threading.Lock()
+
     def calendar(self) -> list[dict]:
-        ts, data = self._calendar
-        if time.time() - ts < 3 * 3600 and ts:
-            events = data
-        else:
-            try:
-                r = requests.get("https://nfs.faireconomy.media/ff_calendar_thisweek.json", headers=UA, timeout=15)
-                events = r.json()
-                self._calendar = (time.time(), events)
-            except Exception as e:
-                log.warning("Calendário económico indisponível: %s", e)
-                events = data
+        with NewsHub._cal_lock:
+            ts, data = NewsHub._cal_shared
+            if not (ts and time.time() - ts < 3 * 3600):
+                try:
+                    r = requests.get("https://nfs.faireconomy.media/ff_calendar_thisweek.json", headers=UA, timeout=15)
+                    fresh = r.json()
+                    if not isinstance(fresh, list):
+                        raise ValueError("resposta inesperada")
+                    NewsHub._cal_shared[:] = [time.time(), fresh]
+                except Exception as e:
+                    code = getattr(locals().get("r"), "status_code", "")
+                    log.warning("Calendário económico indisponível%s (nova tentativa em 15 min): %s",
+                                f" (HTTP {code})" if code else "", str(e)[:100])
+                    NewsHub._cal_shared[:] = [time.time() - 3 * 3600 + 900, data]  # não repete a cada análise
+            events = NewsHub._cal_shared[1]
         now = time.time()
         out = []
         for ev in events or []:
@@ -268,6 +314,8 @@ class NewsHub:
         ts, data = self._global
         if data and time.time() - ts < 900:
             return data
+        if self.market != "crypto":
+            return self._macro_snapshot(data)
         try:
             g = requests.get("https://api.coingecko.com/api/v3/global", headers=UA, timeout=15).json()["data"]
             data = {
@@ -281,6 +329,29 @@ class NewsHub:
             log.debug("CoinGecko indisponível: %s", e)
         return data
 
+    def _macro_snapshot(self, cached):
+        """Dólar, juros, VIX, S&P 500, ouro, petróleo e EUR/USD (Yahoo, cache de 15 min)."""
+        try:
+            import yfinance as yf
+            tickers = [t for t, _ in MACRO_TICKERS.values()]
+            raw = yf.download(tickers, period="7d", interval="1d", progress=False, group_by="ticker", threads=True,
+                              auto_adjust=False)
+            data = {}
+            for key, (t, label) in MACRO_TICKERS.items():
+                try:
+                    c = raw[t]["Close"].dropna()
+                except (KeyError, TypeError):
+                    continue
+                if len(c) >= 2:
+                    data[key] = {"label": label, "last": round(float(c.iloc[-1]), 4),
+                                 "change_1d_pct": round((float(c.iloc[-1]) / float(c.iloc[-2]) - 1) * 100, 2)}
+            if data:
+                self._global = (time.time(), data)
+                return data
+        except Exception as e:
+            log.debug("Indicadores globais indisponíveis: %s", e)
+        return cached
+
     def macro(self) -> dict:
         return {
             "high_impact_events": self.calendar(),
@@ -293,11 +364,17 @@ class NewsHub:
     def ai_digest(self, symbol: str, asset_headlines: list, macro: dict) -> dict | None:
         if not self.client:
             return None
-        asset = symbol if self.market == "stocks" else symbol.split("/")[0]
+        asset = symbol if self.market != "crypto" else symbol.split("/")[0]
         hit = self._ai.get(asset)
         if hit and time.time() - hit[0] < self.ttl:
             return hit[1]
-        if self.market == "stocks":
+        if self.market == "cfd":
+            from .catalog import CFD_SPECS
+            kind = "de forex, matérias-primas e mercados"
+            name = (CFD_SPECS.get(symbol) or {}).get("name") or symbol
+            focus = (f"o que move {name} agora (bancos centrais, dados macro, dólar, juros, geopolítica, procura e "
+                     "oferta, fluxos de refúgio, posicionamento/COT, previsões dos grandes bancos)")
+        elif self.market == "stocks":
             kind = "financeiros"
             focus = ("notícias da empresa/ETF (resultados, previsões, analistas, produtos, processos, fusões, "
                      "fluxos, notícias do setor)")
@@ -331,7 +408,7 @@ class NewsHub:
             return hit[1] if hit else None
 
     def for_symbol(self, symbol: str, macro: dict, use_ai: bool = True) -> dict:
-        asset = symbol if self.market == "stocks" else symbol.split("/")[0]
+        asset = symbol if self.market != "crypto" else symbol.split("/")[0]
         hs = self.headlines(asset, hours=36, limit=8)
         return {
             "ai_summary": self.ai_digest(symbol, hs, macro) if use_ai else None,

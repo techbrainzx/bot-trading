@@ -524,3 +524,57 @@ tr.picked td { background: var(--accent-weak); }
 .mini-badge.good { background: var(--up-weak); color: var(--up-text); }
 textarea.input { height: auto; min-height: 84px; padding: 8px 11px; resize: vertical; font-family: var(--mono); font-size: 12px; line-height: 1.5; }
 @media (max-width: 1280px) { .switches { flex-direction: column; } }
+
+/* ============================================================ IP público (Modo Real) */
+.ip-box { border: 1px solid color-mix(in srgb, var(--accent) 35%, transparent); background: var(--accent-weak); border-radius: 10px; padding: 10px 12px; margin: 4px 0 12px; }
+.ip-row { display: flex; align-items: center; justify-content: space-between; gap: 10px; font-size: 13px; }
+.ip-row b { font-size: 14px; letter-spacing: .02em; }
+.ip-box .help { margin-top: 6px; }
+.check-item.info { color: var(--text-secondary); }
+.check-item.info .i { color: var(--accent); transform: rotate(-90deg); }
+
+/* ============================================================ gestão de ativos */
+.assets-icon { background: var(--accent-weak) !important; color: var(--accent) !important; }
+.asset-results { display: flex; flex-direction: column; gap: 6px; margin: -4px 0 14px; }
+.asset-row { display: grid; grid-template-columns: minmax(0, 1fr) auto; gap: 10px; align-items: center; padding: 8px 10px; border: 1px solid var(--border); border-radius: 9px; background: var(--surface-2); }
+.asset-row .sym { font-weight: 650; }
+.asset-row .nm { color: var(--text-secondary); font-size: 12.5px; margin-left: 6px; }
+.asset-row .meta { font-size: 11.5px; color: var(--text-muted); margin-top: 2px; }
+.asset-row .meta .bad { color: var(--down-text); }
+.asset-row .meta .warn { color: var(--warn); }
+.asset-section { padding-top: 14px; margin-top: 4px; border-top: 1px solid var(--border); }
+.asset-section h3 { margin-bottom: 4px; }
+.asset-mine { display: flex; flex-wrap: wrap; gap: 6px; margin-top: 10px; }
+.asset-chip { display: inline-flex; align-items: center; gap: 6px; padding: 4px 6px 4px 11px; border-radius: 999px; border: 1px solid var(--border-strong); background: var(--surface-2); font-size: 12.5px; }
+.asset-chip b { font-weight: 650; }
+.asset-chip .nm { color: var(--text-muted); font-size: 11.5px; max-width: 150px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.asset-chip button { border: 0; background: none; color: var(--text-muted); cursor: pointer; width: 20px; height: 20px; border-radius: 50%; display: grid; place-items: center; }
+.asset-chip button:hover { background: var(--down-weak); color: var(--down-text); }
+.asset-chip .i { width: 12px; height: 12px; }
+.cat-list { display: grid; grid-template-columns: 1fr 1fr; gap: 6px 14px; margin-top: 10px; }
+.cat-item { display: flex; gap: 8px; align-items: flex-start; font-size: 12.5px; cursor: pointer; }
+.cat-item input { margin-top: 2px; accent-color: var(--accent); }
+.cat-item .ex { display: block; color: var(--text-muted); font-size: 11.5px; }
+.quick-add { display: flex; flex-wrap: wrap; gap: 6px; margin-top: 8px; }
+.star { color: var(--warn); font-size: 12px; }
+@media (max-width: 860px) { .cat-list { grid-template-columns: 1fr; } }
+
+/* ============================================================ CFDs: compra e venda a descoberto, cTrader */
+.badge.SHORT, .badge.CLOSE { background: var(--down-weak); color: var(--down-text); }
+.badge.SHORT_LIMIT, .badge.SHORT_STOP { background: color-mix(in srgb, var(--down) 14%, transparent); color: var(--down-text); }
+.side-badge { display: inline-block; margin-left: 6px; font-size: 10.5px; font-weight: 700; padding: 1px 6px; border-radius: 4px; letter-spacing: .03em; vertical-align: 1px; }
+.side-badge.long { background: var(--up-weak); color: var(--up-text); }
+.side-badge.short { background: var(--down-weak); color: var(--down-text); }
+.ct-box { border: 1px solid var(--border); border-radius: 10px; padding: 12px 14px; background: var(--surface-2); margin: 4px 0 12px; }
+.ct-steps { margin: 0 0 10px 18px; padding: 0; font-size: 12.5px; color: var(--text-secondary); line-height: 1.55; }
+.ct-steps li + li { margin-top: 6px; }
+.ct-steps a { color: var(--accent); }
+.ct-uri { display: flex; align-items: center; gap: 8px; margin: 6px 0; padding: 6px 8px; border-radius: 8px; background: var(--surface-1); border: 1px solid var(--border); }
+.ct-uri .mono { flex: 1; font-size: 12px; overflow-wrap: anywhere; color: var(--text); }
+.ct-connect { display: flex; align-items: center; gap: 10px; margin: 12px 0 6px; flex-wrap: wrap; }
+.ct-manual { margin: 8px 0; font-size: 12.5px; }
+.ct-manual summary { cursor: pointer; color: var(--text-muted); }
+.ct-manual[open] summary { margin-bottom: 8px; }
+.ct-account { margin-top: 12px; }
+.ct-account select { min-width: 280px; }
+.macro-row { display: flex; justify-content: space-between; gap: 8px; }
